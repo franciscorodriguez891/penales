@@ -7,6 +7,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Penales">
 <title>Tanda de Penales</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -171,9 +172,91 @@
   .team-inline { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; }
 
   #game-area { display: flex; flex-direction: column; align-items: center; }
+
+  /* ── MODE / LOBBY / WAIT SCREENS ── */
+  #mode-screen, #lobby-screen, #wait-screen {
+    display: none; flex-direction: column; align-items: center;
+    gap: 20px; text-align: center; max-width: 360px; width: 100%;
+  }
+  #mode-screen h1 { font-size: clamp(1.4rem,5vw,2rem); text-shadow: 2px 2px 4px #000; }
+  #mode-screen p  { color: #d4f5d4; font-size: 1rem; }
+  .mode-btn {
+    width: 100%; padding: 18px; border: none; border-radius: 14px;
+    font-size: 1.1rem; font-weight: bold; cursor: pointer;
+    touch-action: manipulation; transition: transform 0.1s;
+  }
+  .mode-btn:active { transform: scale(0.97); }
+  .mode-btn-single { background: #ffd700; color: #333; }
+  .mode-btn-multi  { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
+
+  #lobby-screen h2 { font-size: 1.4rem; }
+  #lobby-screen p  { color: #d4f5d4; font-size: 0.95rem; }
+  #room-code-display {
+    font-size: 3.5rem; font-weight: 900; letter-spacing: 12px;
+    background: rgba(0,0,0,0.4); padding: 18px 28px; border-radius: 14px;
+    color: #ffd700; text-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  }
+  #code-input {
+    font-size: 2.2rem; font-weight: bold; letter-spacing: 10px; text-align: center;
+    text-transform: uppercase; width: 180px; padding: 12px;
+    border-radius: 12px; border: 3px solid rgba(255,255,255,0.4);
+    background: rgba(0,0,0,0.3); color: #fff; outline: none;
+  }
+  #code-input:focus { border-color: #ffd700; }
+  #lobby-status { font-size: 0.95rem; color: #d4f5d4; min-height: 22px; }
+
+  #wait-screen p { font-size: 1.1rem; color: #d4f5d4; }
+  .spinner {
+    width: 48px; height: 48px; border: 5px solid rgba(255,255,255,0.2);
+    border-top-color: #ffd700; border-radius: 50%;
+    animation: spin 0.9s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  #wait-detail { font-size: 0.85rem; color: rgba(255,255,255,0.5); }
 </style>
 </head>
 <body>
+
+<!-- ══ MODE SELECT ══ -->
+<div id="mode-screen">
+  <h1>⚽ Tanda de Penales</h1>
+  <p>¿Cómo quieren jugar?</p>
+  <button class="mode-btn mode-btn-single" id="mode-single-btn">📱 Un dispositivo<br><small style="font-weight:normal;font-size:0.8rem">Se pasan el teléfono</small></button>
+  <button class="mode-btn mode-btn-multi"  id="mode-multi-btn">📱📱 Dos dispositivos<br><small style="font-weight:normal;font-size:0.8rem">Cada uno en su celular</small></button>
+</div>
+
+<!-- ══ LOBBY (2-device) ══ -->
+<div id="lobby-screen">
+  <!-- HOST view -->
+  <div id="host-lobby" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
+    <h2>Compartí este código con tu rival</h2>
+    <div id="room-code-display">????</div>
+    <p>Tu rival debe ingresar este código en su celular</p>
+    <div id="lobby-status">Esperando conexión...</div>
+    <div class="spinner"></div>
+  </div>
+  <!-- GUEST view -->
+  <div id="guest-lobby" style="display:none;flex-direction:column;align-items:center;gap:16px;width:100%">
+    <h2>Ingresá el código de tu rival</h2>
+    <input id="code-input" type="text" maxlength="4" placeholder="XXXX" autocomplete="off" autocorrect="off" spellcheck="false"/>
+    <button class="btn btn-primary" id="join-btn">Conectar</button>
+    <div id="lobby-status-guest"></div>
+  </div>
+  <!-- ROLE SELECT -->
+  <div id="role-select" style="display:flex;flex-direction:column;align-items:center;gap:16px;width:100%">
+    <h2>¿Quién sos?</h2>
+    <button class="mode-btn mode-btn-single" id="be-host-btn">🇦🇷 Soy Argentina<br><small style="font-weight:normal;font-size:0.8rem">Creás la sala</small></button>
+    <button class="mode-btn mode-btn-multi"  id="be-guest-btn">🔴⚪ Soy River Plate<br><small style="font-weight:normal;font-size:0.8rem">Entrás con el código</small></button>
+    <button class="btn btn-secondary" id="lobby-back-btn">← Volver</button>
+  </div>
+</div>
+
+<!-- ══ WAIT ══ -->
+<div id="wait-screen">
+  <p id="wait-message">Esperando...</p>
+  <div class="spinner"></div>
+  <div id="wait-detail"></div>
+</div>
 
 <!-- ══ GAME SCREEN ══ -->
 <div id="game-area">
@@ -584,10 +667,25 @@ const zones          = Array.from(document.querySelectorAll('.zone'));
 // ─────────────────────────────────────────────
 // SCREEN HELPERS
 // ─────────────────────────────────────────────
-function showGame()     { gameArea.style.display='flex'; handoverScreen.style.display='none'; animScreen.style.display='none'; resultsScreen.style.display='none'; }
-function showHandover() { gameArea.style.display='none'; handoverScreen.style.display='flex'; animScreen.style.display='none'; resultsScreen.style.display='none'; }
-function showAnim()     { gameArea.style.display='none'; handoverScreen.style.display='none'; animScreen.style.display='flex'; resultsScreen.style.display='none'; }
-function showResults()  { gameArea.style.display='none'; handoverScreen.style.display='none'; animScreen.style.display='none'; resultsScreen.style.display='flex'; }
+const modeScreen   = document.getElementById('mode-screen');
+const lobbyScreen  = document.getElementById('lobby-screen');
+const waitScreen   = document.getElementById('wait-screen');
+
+function hideAll() {
+  [modeScreen, lobbyScreen, waitScreen, gameArea, handoverScreen, animScreen, resultsScreen]
+    .forEach(s => s.style.display = 'none');
+}
+function showModeSelect() { hideAll(); modeScreen.style.display  = 'flex'; }
+function showLobby()      { hideAll(); lobbyScreen.style.display = 'flex'; }
+function showWait(msg, detail) {
+  hideAll(); waitScreen.style.display = 'flex';
+  document.getElementById('wait-message').textContent = msg || 'Esperando...';
+  document.getElementById('wait-detail').textContent  = detail || '';
+}
+function showGame()     { hideAll(); gameArea.style.display      = 'flex'; }
+function showHandover() { hideAll(); handoverScreen.style.display= 'flex'; }
+function showAnim()     { hideAll(); animScreen.style.display    = 'flex'; }
+function showResults()  { hideAll(); resultsScreen.style.display = 'flex'; }
 
 // ─────────────────────────────────────────────
 // DOTS
@@ -710,26 +808,45 @@ confirmBtn.addEventListener('click', () => {
 // PHASE TRANSITIONS
 // ─────────────────────────────────────────────
 function advancePhase() {
-  if(state.phase==='p1-kick') {
-    state.phase='p1-save'; renderPhase();
+  const sd = state.mode === 'sudden-death';
 
-  } else if(state.phase==='p1-save') {
-    const sd = state.mode==='sudden-death';
-    handoverTitle.innerHTML = sd ? `¡Turno del Jugador 2 — ${teamLabel('river')}! (MS R${state.sdRound+1})` : `¡Turno del Jugador 2 — ${teamLabel('river')}!`;
-    handoverMsg.textContent = 'Pasale el dispositivo al Jugador 2. El Jugador 1 ya eligió en secreto.';
-    state.phase='p2-kick';
-    showHandover();
+  if (gameMode === 'single') {
+    // ── Single device ──
+    if (state.phase==='p1-kick') {
+      state.phase='p1-save'; renderPhase();
+    } else if (state.phase==='p1-save') {
+      handoverTitle.innerHTML = sd
+        ? `¡Turno del Jugador 2 — ${teamLabel('river')}! (MS R${state.sdRound+1})`
+        : `¡Turno del Jugador 2 — ${teamLabel('river')}!`;
+      handoverMsg.textContent = 'Pasale el dispositivo al Jugador 2. El Jugador 1 ya eligió en secreto.';
+      state.phase='p2-kick'; showHandover();
+    } else if (state.phase==='p2-kick') {
+      state.phase='p2-save'; renderPhase();
+    } else if (state.phase==='p2-save') {
+      const queue = buildAnimQueue();
+      playAnimQueue(queue, () => state.mode==='normal' ? evaluateNormal() : evaluateSuddenDeath());
+    }
 
-  } else if(state.phase==='p2-kick') {
-    state.phase='p2-save'; renderPhase();
+  } else if (gameMode === 'host') {
+    // ── Two devices — host (Argentina / P1) ──
+    if (state.phase==='p1-kick') {
+      state.phase='p1-save'; renderPhase();
+    } else if (state.phase==='p1-save') {
+      // Send P1's choices to guest, wait for P2
+      mpSend({ type:'p1-done', p1Kicks:state.p1Kicks, p1Saves:state.p1Saves, sd, sdRound:state.sdRound });
+      showWait(sd ? 'Esperando que River Plate elija (MS)...' : 'Esperando que River Plate elija...', 'Tus elecciones ya están guardadas en secreto.');
+    }
+    // p2-kick / p2-save happen on guest's phone
 
-  } else if(state.phase==='p2-save') {
-    // Build animation queue then evaluate
-    const queue = buildAnimQueue();
-    playAnimQueue(queue, () => {
-      if(state.mode==='normal') evaluateNormal();
-      else evaluateSuddenDeath();
-    });
+  } else if (gameMode === 'guest') {
+    // ── Two devices — guest (River / P2) ──
+    if (state.phase==='p2-kick') {
+      state.phase='p2-save'; renderPhase();
+    } else if (state.phase==='p2-save') {
+      // Send P2's choices to host
+      mpSend({ type:'p2-done', p2Kicks:state.p2Kicks, p2Saves:state.p2Saves });
+      showWait('Calculando resultados...', 'Tus elecciones ya están guardadas en secreto.');
+    }
   }
 }
 
@@ -749,14 +866,20 @@ function evaluateNormal() {
     if(isGoal(state.p2Kicks, state.p1Saves, state.p2Misses, i)) g2++;
   }
   state.goalsP1=g1; state.goalsP2=g2;
-  if(g1===g2){
-    state.mode='sudden-death'; state.sdRound=0;
-    handoverTitle.textContent='¡Empate! — Muerte Súbita';
-    handoverMsg.textContent=`${g1}-${g2} al término de los 5 penales. Se juega de a uno hasta que haya un ganador. Empieza el Jugador 1.`;
-    state.phase='p1-kick';
-    showHandover();
+  if (g1===g2) {
+    state.mode='sudden-death'; state.sdRound=0; state.phase='p1-kick';
+    if (gameMode === 'single') {
+      handoverTitle.textContent='¡Empate! — Muerte Súbita';
+      handoverMsg.textContent=`${g1}-${g2} al término de los 5 penales. Se juega de a uno hasta que haya un ganador.`;
+      showHandover();
+    } else if (gameMode === 'host') {
+      mpSend({ type:'sd-round', sdRound:0, goalsP1:g1, goalsP2:g2 });
+      showGame(); renderPhase();
+    }
+    // guest: host will send sd-round message
   } else {
-    showFinalResults();
+    if (gameMode !== 'guest') showFinalResults();
+    // guest already called showFinalResults from start-anim callback
   }
 }
 
@@ -765,15 +888,20 @@ function evaluateSuddenDeath() {
   const g1=isGoal(state.p1Kicks, state.p2Saves, state.p1Misses, idx)?1:0;
   const g2=isGoal(state.p2Kicks, state.p1Saves, state.p2Misses, idx)?1:0;
   state.goalsP1+=g1; state.goalsP2+=g2;
-  if(g1!==g2){
-    showFinalResults();
+  if (g1!==g2) {
+    if (gameMode !== 'guest') showFinalResults();
   } else {
     state.sdRound++;
-    const detail=g1===1?'Ambos convirtieron.':'Ambos fallaron.';
-    handoverTitle.textContent=`Sigue la Muerte Súbita — Ronda ${state.sdRound+1}`;
-    handoverMsg.textContent=`${detail} Nueva ronda. Empieza el Jugador 1.`;
     state.phase='p1-kick';
-    showHandover();
+    if (gameMode === 'single') {
+      const detail = g1===1?'Ambos convirtieron.':'Ambos fallaron.';
+      handoverTitle.textContent=`Sigue la Muerte Súbita — Ronda ${state.sdRound+1}`;
+      handoverMsg.textContent=`${detail} Nueva ronda. Empieza el Jugador 1.`;
+      showHandover();
+    } else if (gameMode === 'host') {
+      mpSend({ type:'sd-round', sdRound:state.sdRound, goalsP1:state.goalsP1, goalsP2:state.goalsP2 });
+      showGame(); renderPhase();
+    }
   }
 }
 
@@ -827,7 +955,7 @@ function penaltyRow(label, kickPos, savePos, goal, miss) {
   </div>`;
 }
 
-restartBtn.addEventListener('click',()=>{ state=initState(); showGame(); renderPhase(); });
+restartBtn.addEventListener('click',()=>{ mpDestroy(); state=initState(); gameMode='single'; showModeSelect(); });
 
 // ─────────────────────────────────────────────
 // ANIMATION SYSTEM
@@ -1487,10 +1615,177 @@ function drawGoalieDeject(team) {
 }
 
 // ─────────────────────────────────────────────
+// MULTIPLAYER (PeerJS)
+// ─────────────────────────────────────────────
+let gameMode = 'single'; // 'single' | 'host' | 'guest'
+let mpPeer   = null;
+let mpConn   = null;
+
+function mpSend(msg) { if (mpConn && mpConn.open) mpConn.send(msg); }
+
+function mpDestroy() {
+  if (mpConn)  { mpConn.close();  mpConn  = null; }
+  if (mpPeer)  { mpPeer.destroy(); mpPeer = null; }
+}
+
+function mpError(msg) {
+  mpDestroy();
+  alert('Error de conexión: ' + msg + '\n\nVolvé al menú e intentá de nuevo.');
+  state = initState(); gameMode = 'single'; showModeSelect();
+}
+
+// Messages received from the other device
+function onMpMessage(msg) {
+  switch (msg.type) {
+
+    case 'p1-done':
+      // Guest receives P1's choices → now guest picks for P2
+      state.p1Kicks  = msg.p1Kicks;
+      state.p1Saves  = msg.p1Saves;
+      state.mode     = msg.sd ? 'sudden-death' : 'normal';
+      state.sdRound  = msg.sdRound || 0;
+      state.phase    = 'p2-kick';
+      state.currentIdx = 0;
+      showGame(); renderPhase();
+      break;
+
+    case 'p2-done':
+      // Host receives P2's choices → build queue, start animations on both
+      state.p2Kicks = msg.p2Kicks;
+      state.p2Saves = msg.p2Saves;
+      const queue   = buildAnimQueue();
+      const payload = { type:'start-anim', queue, p1Misses:state.p1Misses, p2Misses:state.p2Misses,
+                        goalsP1:state.goalsP1, goalsP2:state.goalsP2, mode:state.mode, sdRound:state.sdRound };
+      mpSend(payload);
+      playAnimQueue(queue, () => state.mode==='normal' ? evaluateNormal() : evaluateSuddenDeath());
+      break;
+
+    case 'start-anim':
+      // Guest receives full animation data
+      state.p1Misses = msg.p1Misses;
+      state.p2Misses = msg.p2Misses;
+      state.goalsP1  = msg.goalsP1  || 0;
+      state.goalsP2  = msg.goalsP2  || 0;
+      state.mode     = msg.mode     || 'normal';
+      state.sdRound  = msg.sdRound  || 0;
+      playAnimQueue(msg.queue, () => {
+        // Guest evaluates to show results (same data → same result)
+        if (state.mode==='normal') evaluateNormal(); else evaluateSuddenDeath();
+      });
+      break;
+
+    case 'sd-round':
+      // Guest gets notified of sudden death round
+      state.mode     = 'sudden-death';
+      state.sdRound  = msg.sdRound;
+      state.goalsP1  = msg.goalsP1;
+      state.goalsP2  = msg.goalsP2;
+      state.phase    = 'p2-kick';
+      state.currentIdx = 0;
+      const sdLabel  = state.sdRound === 0 ? '¡Empate! Comienza la Muerte Súbita.' : `Muerte Súbita — Ronda ${state.sdRound+1}`;
+      showWait(sdLabel, 'Esperando que Argentina elija primero...');
+      // guest will receive p1-done when host finishes
+      break;
+
+    case 'game-over':
+      // Guest receives final results data
+      state.p1Misses = msg.p1Misses;
+      state.p2Misses = msg.p2Misses;
+      showFinalResults();
+      break;
+  }
+}
+
+function initHost() {
+  gameMode = 'host';
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+  const code  = Array.from({length:4}, () => chars[Math.floor(Math.random()*chars.length)]).join('');
+  document.getElementById('room-code-display').textContent = code;
+  document.getElementById('role-select').style.display  = 'none';
+  document.getElementById('host-lobby').style.display   = 'flex';
+  document.getElementById('guest-lobby').style.display  = 'none';
+  document.getElementById('lobby-status').textContent   = 'Esperando que tu rival se conecte...';
+  showLobby();
+
+  mpPeer = new Peer('penales-' + code);
+  mpPeer.on('connection', c => {
+    mpConn = c;
+    mpConn.on('open', () => {
+      document.getElementById('lobby-status').textContent = '✓ ¡Rival conectado! Empezando...';
+      setTimeout(() => {
+        state = initState(); state.phase = 'p1-kick';
+        showGame(); renderPhase();
+      }, 900);
+    });
+    mpConn.on('data',  onMpMessage);
+    mpConn.on('close', () => mpError('El rival se desconectó.'));
+  });
+  mpPeer.on('error', e => mpError(e.message || e.type));
+}
+
+function initGuest(code) {
+  gameMode = 'guest';
+  const statusEl = document.getElementById('lobby-status-guest');
+  statusEl.textContent = 'Conectando...';
+
+  mpPeer = new Peer();
+  mpPeer.on('open', () => {
+    mpConn = mpPeer.connect('penales-' + code.toUpperCase().trim());
+    mpConn.on('open', () => {
+      statusEl.textContent = '✓ Conectado. Esperando que Argentina elija...';
+      state = initState();
+      setTimeout(() => showWait('Esperando que Argentina elija...', 'Cuando terminen te avisamos.'), 800);
+    });
+    mpConn.on('data',  onMpMessage);
+    mpConn.on('close', () => mpError('El rival se desconectó.'));
+    mpConn.on('error', e => mpError(e.message || e.type));
+  });
+  mpPeer.on('error', e => mpError(e.message || e.type));
+}
+
+// ── Mode-select buttons ──
+document.getElementById('mode-single-btn').addEventListener('click', () => {
+  gameMode = 'single';
+  state = initState();
+  showGame(); renderPhase();
+});
+
+document.getElementById('mode-multi-btn').addEventListener('click', () => {
+  document.getElementById('role-select').style.display  = 'flex';
+  document.getElementById('host-lobby').style.display   = 'none';
+  document.getElementById('guest-lobby').style.display  = 'none';
+  showLobby();
+});
+
+document.getElementById('be-host-btn').addEventListener('click', initHost);
+
+document.getElementById('be-guest-btn').addEventListener('click', () => {
+  document.getElementById('role-select').style.display  = 'none';
+  document.getElementById('host-lobby').style.display   = 'none';
+  document.getElementById('guest-lobby').style.display  = 'flex';
+});
+
+document.getElementById('join-btn').addEventListener('click', () => {
+  const code = document.getElementById('code-input').value.trim();
+  if (code.length !== 4) {
+    document.getElementById('lobby-status-guest').textContent = 'El código debe tener 4 letras.';
+    return;
+  }
+  initGuest(code);
+});
+
+document.getElementById('code-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('join-btn').click();
+});
+
+document.getElementById('lobby-back-btn').addEventListener('click', () => {
+  mpDestroy(); gameMode = 'single'; showModeSelect();
+});
+
+// ─────────────────────────────────────────────
 // INIT
 // ─────────────────────────────────────────────
-showGame();
-renderPhase();
+showModeSelect();
 </script>
 </body>
 </html>
