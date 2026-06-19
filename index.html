@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Penales">
+<title>Tanda de Penales</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: #1a6b2a;
+    font-family: 'Segoe UI', sans-serif;
+    color: #fff;
+    min-height: 100vh;
+    min-height: -webkit-fill-available;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  h1 { font-size: clamp(1.3rem, 5vw, 2rem); text-align: center; margin-bottom: 6px; text-shadow: 2px 2px 4px #000; }
+
+  #phase-title {
+    font-size: clamp(0.8rem, 3vw, 1.05rem); text-align: center; margin-bottom: 14px;
+    background: rgba(0,0,0,0.35); padding: 7px 16px; border-radius: 20px; min-height: 36px;
+    display: flex; align-items: center; justify-content: center; gap: 6px; flex-wrap: wrap;
+  }
+
+  #goal-wrapper {
+    position: relative;
+    width: min(420px, 96vw);
+    height: min(240px, calc(96vw * 0.571));
+    margin-bottom: 16px;
+  }
+  #goal-svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+
+  .zone {
+    position: absolute; width: 28.57%; height: 40%;
+    border: 2px dashed rgba(255,255,255,0.3); border-radius: 6px;
+    cursor: pointer; transition: background 0.15s; display: flex;
+    align-items: center; justify-content: center; user-select: none;
+    touch-action: manipulation;
+  }
+  .zone:hover  { background: rgba(255,255,255,0.18); }
+  .zone.selected  { background: rgba(255,220,0,0.45); border-color: #ffd700; border-style: solid; }
+  .zone.confirmed { background: rgba(255,220,0,0.25); border-color: #ffd700; border-style: solid; cursor: pointer; }
+  .zone-num {
+    font-size: clamp(1.4rem, 6vw, 2.2rem); font-weight: 900; color: rgba(255,255,255,0.55);
+    text-shadow: 0 2px 6px rgba(0,0,0,0.7); pointer-events: none; line-height: 1;
+    position: absolute;
+  }
+  .zone.selected .zone-num  { color: rgba(255,220,0,0.9); }
+  .zone.confirmed .zone-num { color: rgba(255,220,0,0.7); }
+  .zone .badge-container {
+    position: absolute; top: 4px; right: 4px;
+    display: flex; flex-wrap: wrap-reverse; gap: 3px; justify-content: flex-end; max-width: 86px;
+  }
+  .zone .badge {
+    width: 22px; height: 22px; background: #ffd700; border-radius: 50%;
+    color: #333; font-size: 0.7rem; font-weight: bold;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+
+  /* Positions as % of wrapper so they scale with the goal */
+  .zone[data-pos="0"] { left: 10.48%; top: 9.17%;  }
+  .zone[data-pos="1"] { left: 10.48%; top: 50.83%; }
+  .zone[data-pos="2"] { left: 35.71%; top: 9.17%;  }
+  .zone[data-pos="3"] { left: 35.71%; top: 50.83%; }
+  .zone[data-pos="4"] { left: 60.95%; top: 9.17%;  }
+  .zone[data-pos="5"] { left: 60.95%; top: 50.83%; }
+
+  #penalties-row { display: flex; gap: 10px; margin-bottom: 20px; }
+  .pen-dot {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: rgba(255,255,255,0.2); border: 2px solid rgba(255,255,255,0.5);
+    display: flex; align-items: center; justify-content: center; font-size: 0.7rem; transition: background 0.2s;
+  }
+  .pen-dot.active { background: #ffd700; border-color: #ffd700; color: #333; font-weight: bold; }
+  .pen-dot.done   { background: #4caf50; border-color: #4caf50; }
+
+  #instruction { font-size: 0.95rem; text-align: center; margin-bottom: 14px; min-height: 22px; color: #d4f5d4; }
+
+  .btn {
+    padding: 14px 32px; border: none; border-radius: 8px;
+    font-size: 1rem; font-weight: bold; cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    touch-action: manipulation; min-height: 48px;
+  }
+  .btn:active { transform: scale(0.97); }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .btn-primary   { background: #ffd700; color: #333; }
+  .btn-secondary { background: rgba(255,255,255,0.15); color: #fff; border: 2px solid rgba(255,255,255,0.4); }
+
+  #handover-screen { display: none; flex-direction: column; align-items: center; gap: 18px; text-align: center; }
+  #handover-screen h2 { font-size: 1.8rem; }
+  #handover-screen p  { font-size: 1rem; color: #d4f5d4; max-width: 340px; }
+
+  /* ── ANIMATION SCREEN ── */
+  #animation-screen { display: none; flex-direction: column; align-items: center; gap: 10px; }
+
+  #anim-label {
+    font-size: 1.1rem; font-weight: bold;
+    background: rgba(0,0,0,0.45); padding: 7px 22px; border-radius: 20px;
+  }
+
+  #anim-svg {
+    width: min(560px, 96vw); height: auto;
+    border-radius: 10px; filter: drop-shadow(0 4px 16px rgba(0,0,0,0.5));
+  }
+
+  #anim-result-text {
+    font-size: clamp(1.2rem, 5vw, 2.4rem); font-weight: 900; min-height: 50px;
+    display: flex; align-items: center; letter-spacing: 2px;
+    text-shadow: 2px 2px 8px rgba(0,0,0,0.6); opacity: 0;
+    transition: opacity 0.35s; text-align: center;
+  }
+  #anim-result-text.visible { opacity: 1; }
+  #anim-result-text.goal { color: #4cff60; }
+  #anim-result-text.save { color: #ff9940; }
+
+  #anim-scoreboard {
+    font-size: 1rem; color: #d4f5d4;
+    background: rgba(0,0,0,0.35); padding: 5px 18px; border-radius: 12px;
+  }
+
+  #anim-next-btn { display: none; margin-top: 4px; }
+
+  /* transitions for animated SVG elements */
+  #anim-goalie-g { transition: transform 0.65s cubic-bezier(0.2,0.6,0.4,1); }
+  #anim-ball-g   { transition: transform 0.72s ease-in; }
+  #anim-net-bulge { transition: rx 0.4s ease-out, ry 0.4s ease-out, opacity 0.4s; }
+
+  /* ── RESULTS SCREEN ── */
+  #results-screen {
+    display: none; flex-direction: column; align-items: center;
+    gap: 14px; width: 100%; max-width: min(560px, 96vw);
+  }
+  #results-screen h2 { font-size: 1.8rem; text-align: center; }
+
+  .result-block { background: rgba(0,0,0,0.3); border-radius: 12px; padding: 16px 20px; width: 100%; }
+  .result-block h3 { font-size: 1rem; margin-bottom: 10px; color: #ffd700; }
+
+  .penalty-result-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 0.9rem; }
+  .penalty-result-row .pen-num { width: 30px; text-align: right; color: #aaa; }
+  .kick-label, .save-label { background: rgba(255,255,255,0.1); padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
+  .vs-label { color: #aaa; font-size: 0.8rem; }
+  .result-icon { font-size: 1rem; margin-left: auto; }
+
+  .score-display {
+    display: flex; justify-content: center; align-items: center;
+    gap: 30px; padding: 20px; background: rgba(0,0,0,0.4); border-radius: 12px; width: 100%;
+  }
+  .score-display .player-score { text-align: center; }
+  .score-display .player-score .name { font-size: 0.9rem; color: #d4f5d4; }
+  .score-display .player-score .goals { font-size: 3rem; font-weight: bold; color: #ffd700; }
+  .score-display .separator { font-size: 2rem; color: #aaa; }
+
+  #winner-banner {
+    font-size: 1.6rem; font-weight: bold; text-align: center;
+    padding: 18px 32px; background: #ffd700; color: #333; border-radius: 12px;
+    display: flex; align-items: center; justify-content: center; gap: 14px;
+    flex-wrap: wrap; line-height: 1.3;
+  }
+  #winner-banner small { font-size: 1rem; font-weight: normal; display: block; }
+  #winner-banner span { text-align: center; }
+  .team-inline { display:inline-flex; align-items:center; gap:5px; vertical-align:middle; }
+
+  #game-area { display: flex; flex-direction: column; align-items: center; }
+</style>
+</head>
+<body>
+
+<!-- ══ GAME SCREEN ══ -->
+<div id="game-area">
+  <h1>⚽ Tanda de Penales</h1>
+  <div id="phase-title"></div>
+  <div id="goal-wrapper">
+    <svg id="goal-svg" viewBox="0 0 420 240" xmlns="http://www.w3.org/2000/svg">
+      <rect x="0" y="200" width="420" height="40" fill="#157a2a"/>
+      <rect x="42" y="22" width="336" height="176" fill="rgba(255,255,255,0.06)"/>
+      <line x1="42"  y1="22" x2="42"  y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="84"  y1="22" x2="84"  y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="126" y1="22" x2="126" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="168" y1="22" x2="168" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="210" y1="22" x2="210" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="252" y1="22" x2="252" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="294" y1="22" x2="294" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="336" y1="22" x2="336" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="378" y1="22" x2="378" y2="198" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="42" y1="50"  x2="378" y2="50"  stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="42" y1="78"  x2="378" y2="78"  stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="42" y1="106" x2="378" y2="106" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="42" y1="134" x2="378" y2="134" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <line x1="42" y1="162" x2="378" y2="162" stroke="white" stroke-width="0.5" opacity="0.3"/>
+      <rect x="14" y="16" width="8" height="190" rx="3" fill="white"/>
+      <rect x="398" y="16" width="8" height="190" rx="3" fill="white"/>
+      <rect x="14" y="12" width="392" height="10" rx="3" fill="white"/>
+      <line x1="0" y1="200" x2="420" y2="200" stroke="white" stroke-width="2"/>
+      <circle cx="210" cy="226" r="5" fill="white"/>
+      <path d="M 160 200 A 60 60 0 0 1 260 200" stroke="white" stroke-width="2" fill="none"/>
+    </svg>
+    <div class="zone" data-pos="0"><span class="zone-num">4</span></div>
+    <div class="zone" data-pos="1"><span class="zone-num">1</span></div>
+    <div class="zone" data-pos="2"><span class="zone-num">5</span></div>
+    <div class="zone" data-pos="3"><span class="zone-num">2</span></div>
+    <div class="zone" data-pos="4"><span class="zone-num">6</span></div>
+    <div class="zone" data-pos="5"><span class="zone-num">3</span></div>
+  </div>
+  <div id="penalties-row"></div>
+  <div id="instruction"></div>
+  <button class="btn btn-primary" id="confirm-btn" disabled>Confirmar</button>
+</div>
+
+<!-- ══ HANDOVER SCREEN ══ -->
+<div id="handover-screen">
+  <h2 id="handover-title"></h2>
+  <p id="handover-msg"></p>
+  <button class="btn btn-primary" id="handover-btn">Listo, continuar</button>
+</div>
+
+<!-- ══ ANIMATION SCREEN ══ -->
+<div id="animation-screen">
+  <div id="anim-label">Penal 1</div>
+  <svg id="anim-svg" viewBox="0 0 600 400" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <!-- Ball shading -->
+      <radialGradient id="ballGrad" cx="32%" cy="28%" r="68%">
+        <stop offset="0%"   stop-color="#ffffff"/>
+        <stop offset="60%"  stop-color="#e8e8e8"/>
+        <stop offset="100%" stop-color="#b0b0b0"/>
+      </radialGradient>
+      <!-- Floodlight glows -->
+      <radialGradient id="lg1" cx="0%" cy="0%" r="100%">
+        <stop offset="0%"   stop-color="rgba(255,235,150,0.38)"/>
+        <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+      </radialGradient>
+      <radialGradient id="lg2" cx="100%" cy="0%" r="100%">
+        <stop offset="0%"   stop-color="rgba(255,235,150,0.38)"/>
+        <stop offset="100%" stop-color="rgba(0,0,0,0)"/>
+      </radialGradient>
+      <!-- Goal post gradient -->
+      <linearGradient id="postGrad" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%"   stop-color="#e0e0e0"/>
+        <stop offset="40%"  stop-color="#ffffff"/>
+        <stop offset="100%" stop-color="#c0c0c0"/>
+      </linearGradient>
+      <!-- Crowd blur -->
+      <filter id="crowdBlur"><feGaussianBlur stdDeviation="4.5"/></filter>
+      <!-- Ball shadow blur -->
+      <filter id="shadowBlur"><feGaussianBlur stdDeviation="3"/></filter>
+      <!-- Post glow -->
+      <filter id="postGlow">
+        <feGaussianBlur stdDeviation="2" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+
+    <!-- ── NIGHT SKY ── -->
+    <rect width="600" height="400" fill="#0c1520"/>
+    <!-- Stars (tiny dots) -->
+    <circle cx="40"  cy="18" r="0.8" fill="white" opacity="0.7"/>
+    <circle cx="100" cy="8"  r="0.7" fill="white" opacity="0.6"/>
+    <circle cx="180" cy="22" r="0.6" fill="white" opacity="0.5"/>
+    <circle cx="250" cy="10" r="0.8" fill="white" opacity="0.7"/>
+    <circle cx="340" cy="5"  r="0.7" fill="white" opacity="0.6"/>
+    <circle cx="430" cy="15" r="0.8" fill="white" opacity="0.7"/>
+    <circle cx="510" cy="7"  r="0.6" fill="white" opacity="0.5"/>
+    <circle cx="570" cy="20" r="0.7" fill="white" opacity="0.6"/>
+    <circle cx="70"  cy="35" r="0.5" fill="white" opacity="0.4"/>
+    <circle cx="460" cy="35" r="0.5" fill="white" opacity="0.4"/>
+
+    <!-- ── STADIUM UPPER TIER ── -->
+    <rect x="0" y="0" width="600" height="30" fill="#0a0f1a"/>
+    <rect x="0" y="28" width="600" height="6"  fill="#14203a"/>
+
+    <!-- ── CROWD (blurred) ── -->
+    <g filter="url(#crowdBlur)">
+      <!-- Back row -->
+      <rect x="0"   y="30" width="600" height="28" fill="#1a1f40"/>
+      <!-- Colorful fans scattered -->
+      <rect x="0"   y="32" width="80"  height="14" fill="#c0392b" opacity="0.7"/>
+      <rect x="75"  y="36" width="60"  height="12" fill="#2471a3" opacity="0.8"/>
+      <rect x="130" y="30" width="45"  height="16" fill="#e67e22" opacity="0.6"/>
+      <rect x="170" y="34" width="70"  height="14" fill="#27ae60" opacity="0.5"/>
+      <rect x="235" y="31" width="55"  height="15" fill="#c0392b" opacity="0.8"/>
+      <rect x="285" y="35" width="40"  height="13" fill="#f1c40f" opacity="0.7"/>
+      <rect x="320" y="30" width="65"  height="16" fill="#2471a3" opacity="0.6"/>
+      <rect x="380" y="33" width="50"  height="14" fill="#c0392b" opacity="0.7"/>
+      <rect x="425" y="36" width="75"  height="12" fill="#e67e22" opacity="0.5"/>
+      <rect x="495" y="31" width="55"  height="15" fill="#27ae60" opacity="0.8"/>
+      <rect x="545" y="34" width="55"  height="13" fill="#c0392b" opacity="0.6"/>
+      <!-- Middle rows -->
+      <rect x="0"   y="50" width="600" height="22" fill="#16213a"/>
+      <rect x="10"  y="52" width="90"  height="10" fill="#2471a3" opacity="0.7"/>
+      <rect x="95"  y="54" width="50"  height="10" fill="#c0392b" opacity="0.8"/>
+      <rect x="140" y="51" width="80"  height="12" fill="#f1c40f" opacity="0.5"/>
+      <rect x="215" y="53" width="65"  height="10" fill="#c0392b" opacity="0.7"/>
+      <rect x="275" y="50" width="55"  height="12" fill="#2471a3" opacity="0.6"/>
+      <rect x="325" y="53" width="70"  height="10" fill="#e67e22" opacity="0.7"/>
+      <rect x="390" y="51" width="60"  height="12" fill="#c0392b" opacity="0.8"/>
+      <rect x="445" y="54" width="80"  height="10" fill="#27ae60" opacity="0.5"/>
+      <rect x="520" y="51" width="80"  height="12" fill="#2471a3" opacity="0.7"/>
+      <!-- Front crowd row (closer to pitch) -->
+      <rect x="0"   y="72" width="600" height="20" fill="#1a2640"/>
+      <rect x="20"  y="74" width="100" height="9"  fill="#c0392b" opacity="0.6"/>
+      <rect x="115" y="72" width="70"  height="12" fill="#2471a3" opacity="0.7"/>
+      <rect x="180" y="74" width="90"  height="9"  fill="#f1c40f" opacity="0.5"/>
+      <rect x="265" y="72" width="75"  height="12" fill="#c0392b" opacity="0.8"/>
+      <rect x="335" y="74" width="60"  height="10" fill="#27ae60" opacity="0.6"/>
+      <rect x="390" y="72" width="80"  height="12" fill="#e67e22" opacity="0.7"/>
+      <rect x="465" y="74" width="70"  height="9"  fill="#2471a3" opacity="0.8"/>
+      <rect x="530" y="72" width="70"  height="12" fill="#c0392b" opacity="0.6"/>
+    </g>
+
+    <!-- Crowd fade to pitch -->
+    <rect x="0" y="82" width="600" height="40"
+          fill="url(#lg1)" opacity="0.3"/>
+
+    <!-- ── FLOODLIGHTS (corner towers) ── -->
+    <rect x="18"  y="22" width="6" height="55" fill="#334" opacity="0.9"/>
+    <rect x="576" y="22" width="6" height="55" fill="#334" opacity="0.9"/>
+    <ellipse cx="21"  cy="22" rx="10" ry="5" fill="#777" opacity="0.8"/>
+    <ellipse cx="579" cy="22" rx="10" ry="5" fill="#777" opacity="0.8"/>
+    <!-- Light glow from towers -->
+    <rect width="600" height="400" fill="url(#lg1)" opacity="0.9"/>
+    <rect width="600" height="400" fill="url(#lg2)" opacity="0.9"/>
+
+    <!-- ── PITCH (perspective stripes) ── -->
+    <!-- Computed: at y=118 left=98,right=502; at y=400 left=0,right=600 -->
+    <!-- Stripe colors alternate #1d7535 and #227a3a -->
+    <polygon points="98,118  502,118  530,153  70,153"  fill="#1e7a36"/>
+    <polygon points="70,153  530,153  555,188  45,188"  fill="#267d3d"/>
+    <polygon points="45,188  555,188  575,223  25,223"  fill="#1e7a36"/>
+    <polygon points="25,223  575,223  590,258  10,258"  fill="#267d3d"/>
+    <polygon points="10,258  590,258  600,293  0,293"   fill="#1e7a36"/>
+    <polygon points="0,293   600,293  600,328  0,328"   fill="#267d3d"/>
+    <polygon points="0,328   600,328  600,363  0,363"   fill="#1e7a36"/>
+    <polygon points="0,363   600,363  600,400  0,400"   fill="#267d3d"/>
+
+    <!-- ── FIELD MARKINGS ── -->
+    <!-- Goal line -->
+    <line x1="0" y1="252" x2="600" y2="252" stroke="white" stroke-width="2.5" opacity="0.85"/>
+    <!-- Penalty area -->
+    <rect x="145" y="252" width="310" height="55" fill="none" stroke="white" stroke-width="1.5" opacity="0.7"/>
+    <!-- Goal area (small box) -->
+    <rect x="215" y="252" width="170" height="28" fill="none" stroke="white" stroke-width="1.2" opacity="0.6"/>
+    <!-- Penalty spot -->
+    <circle cx="300" cy="368" r="5" fill="white" opacity="0.9"/>
+    <!-- Penalty arc -->
+    <path d="M 222 252 A 80 80 0 0 1 378 252" stroke="white" stroke-width="1.8" fill="none" opacity="0.7"/>
+
+    <!-- ── GOAL — BACK NET DEPTH ── -->
+    <!-- Interior shadow (depth of goal) -->
+    <polygon points="158,54 442,54 442,252 158,252" fill="#061008" opacity="0.85"/>
+    <!-- Back face of net -->
+    <polygon points="205,92 395,92 395,232 205,232" fill="#0d1f10" opacity="0.9"/>
+    <!-- Net depth grid on back face -->
+    <g stroke="rgba(255,255,255,0.18)" stroke-width="0.8">
+      <!-- vertical on back -->
+      <line x1="232" y1="92"  x2="232" y2="232"/>
+      <line x1="259" y1="92"  x2="259" y2="232"/>
+      <line x1="286" y1="92"  x2="286" y2="232"/>
+      <line x1="313" y1="92"  x2="313" y2="232"/>
+      <line x1="340" y1="92"  x2="340" y2="232"/>
+      <line x1="367" y1="92"  x2="367" y2="232"/>
+      <!-- horizontal on back -->
+      <line x1="205" y1="115" x2="395" y2="115"/>
+      <line x1="205" y1="138" x2="395" y2="138"/>
+      <line x1="205" y1="161" x2="395" y2="161"/>
+      <line x1="205" y1="184" x2="395" y2="184"/>
+      <line x1="205" y1="207" x2="395" y2="207"/>
+    </g>
+    <!-- Depth connecting lines (edges going backward) -->
+    <g stroke="rgba(255,255,255,0.35)" stroke-width="1.2">
+      <line x1="158" y1="54"  x2="205" y2="92"/>   <!-- top-left -->
+      <line x1="442" y1="54"  x2="395" y2="92"/>   <!-- top-right -->
+      <line x1="158" y1="252" x2="205" y2="232"/>  <!-- bottom-left -->
+      <line x1="442" y1="252" x2="395" y2="232"/>  <!-- bottom-right -->
+    </g>
+    <!-- Side net panels (semi-transparent mesh) -->
+    <polygon points="158,54 205,92 205,232 158,252"
+             fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.25)" stroke-width="0.8"/>
+    <polygon points="442,54 395,92 395,232 442,252"
+             fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.25)" stroke-width="0.8"/>
+    <polygon points="158,54 205,92 395,92 442,54"
+             fill="rgba(255,255,255,0.04)" stroke="rgba(255,255,255,0.25)" stroke-width="0.8"/>
+    <!-- Front net grid (on goal face) -->
+    <g stroke="rgba(255,255,255,0.22)" stroke-width="0.8">
+      <line x1="185" y1="54"  x2="185" y2="252"/>
+      <line x1="212" y1="54"  x2="212" y2="252"/>
+      <line x1="239" y1="54"  x2="239" y2="252"/>
+      <line x1="266" y1="54"  x2="266" y2="252"/>
+      <line x1="300" y1="54"  x2="300" y2="252"/>
+      <line x1="334" y1="54"  x2="334" y2="252"/>
+      <line x1="361" y1="54"  x2="361" y2="252"/>
+      <line x1="388" y1="54"  x2="388" y2="252"/>
+      <line x1="415" y1="54"  x2="415" y2="252"/>
+      <line x1="158" y1="85"  x2="442" y2="85"/>
+      <line x1="158" y1="116" x2="442" y2="116"/>
+      <line x1="158" y1="147" x2="442" y2="147"/>
+      <line x1="158" y1="178" x2="442" y2="178"/>
+      <line x1="158" y1="209" x2="442" y2="209"/>
+      <line x1="158" y1="240" x2="442" y2="240"/>
+    </g>
+
+    <!-- Net bulge (shown on goal) -->
+    <ellipse id="anim-net-bulge" cx="300" cy="155" rx="0" ry="0"
+             fill="rgba(255,255,255,0.2)" stroke="rgba(255,255,255,0.6)" stroke-width="1.5" opacity="0"/>
+
+    <!-- ── GOAL POSTS ── -->
+    <!-- Shadow behind posts -->
+    <rect x="157" y="54" width="10" height="200" fill="rgba(0,0,0,0.3)" rx="3"/>
+    <rect x="437" y="54" width="10" height="200" fill="rgba(0,0,0,0.3)" rx="3"/>
+    <!-- Posts -->
+    <rect x="155" y="52" width="10" height="202" rx="3" fill="url(#postGrad)" filter="url(#postGlow)"/>
+    <rect x="435" y="52" width="10" height="202" rx="3" fill="url(#postGrad)" filter="url(#postGlow)"/>
+    <!-- Crossbar -->
+    <rect x="155" y="52" width="290" height="11" rx="3" fill="url(#postGrad)" filter="url(#postGlow)"/>
+    <!-- Post highlight lines -->
+    <line x1="158" y1="54"  x2="158" y2="252" stroke="white" stroke-width="1.5" opacity="0.6"/>
+    <line x1="438" y1="54"  x2="438" y2="252" stroke="white" stroke-width="1.5" opacity="0.6"/>
+    <line x1="158" y1="54"  x2="444" y2="54"  stroke="white" stroke-width="1.5" opacity="0.6"/>
+
+    <!-- ── GOALKEEPER (in front of posts) ── -->
+    <g id="anim-goalie-g" style="transform:translate(300px,155px)"></g>
+
+    <!-- ── BALL SHADOW (on grass) ── -->
+    <ellipse id="anim-ball-shadow" cx="300" cy="365" rx="16" ry="5"
+             fill="rgba(0,0,0,0.45)" filter="url(#shadowBlur)"/>
+
+    <!-- ── BALL ── -->
+    <g id="anim-ball-g" style="transform:translate(300px,355px)">
+      <!-- Ball -->
+      <circle cx="0" cy="0" r="15" fill="url(#ballGrad)"/>
+      <!-- Black pentagon patches (soccer ball pattern) -->
+      <!-- Center patch -->
+      <path d="M0,-8.5 L8.1,-2.6 L5,-7.3 L-5,-7.3 L-8.1,-2.6Z" fill="#222" opacity="0.7"/>
+      <path d="M0,-8.5 L8.1,-2.6 L5,6.9 L-5,6.9 L-8.1,-2.6Z" fill="#333" opacity="0.5"/>
+      <!-- Surrounding patches -->
+      <path d="M0,-8.5 L-3,-13 L3,-13Z"    fill="#222" opacity="0.45"/>
+      <path d="M8.1,-2.6 L13,-4 L12,2Z"    fill="#222" opacity="0.45"/>
+      <path d="M5,6.9 L10,10 L6,14Z"       fill="#222" opacity="0.45"/>
+      <path d="M-5,6.9 L-10,10 L-6,14Z"    fill="#222" opacity="0.45"/>
+      <path d="M-8.1,-2.6 L-13,-4 L-12,2Z" fill="#222" opacity="0.45"/>
+      <!-- Sheen -->
+      <ellipse cx="-4" cy="-5" rx="4" ry="3" fill="white" opacity="0.3" transform="rotate(-20,-4,-5)"/>
+    </g>
+
+    <!-- ── KICKER (drawn last = closest to viewer) ── -->
+    <g id="anim-kicker-g" style="transform:translate(265px,348px)"></g>
+  </svg>
+  <div id="anim-result-text"></div>
+  <div id="anim-scoreboard">Argentina: 0 — River Plate: 0</div>
+  <button class="btn btn-primary" id="anim-next-btn">Siguiente ▶</button>
+</div>
+
+<!-- ══ RESULTS SCREEN ══ -->
+<div id="results-screen">
+  <h2>⚽ Resultados</h2>
+  <div class="score-display">
+    <div class="player-score">
+      <div class="name" id="score-name-p1">Jugador 1</div>
+      <div class="goals" id="score-p1">0</div>
+    </div>
+    <div class="separator">–</div>
+    <div class="player-score">
+      <div class="name" id="score-name-p2">Jugador 2</div>
+      <div class="goals" id="score-p2">0</div>
+    </div>
+  </div>
+  <div id="winner-banner"></div>
+  <div class="result-block">
+    <h3 id="result-h3-p1">Penales de Jugador 1</h3>
+    <div id="detail-p1"></div>
+  </div>
+  <div class="result-block">
+    <h3 id="result-h3-p2">Penales de Jugador 2</h3>
+    <div id="detail-p2"></div>
+  </div>
+  <button class="btn btn-secondary" id="restart-btn" style="margin-top:10px">Jugar de nuevo</button>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+// CONSTANTS
+// ─────────────────────────────────────────────
+// ── CRESTS ───────────────────────────────────
+function crestSVG(team, w, h) {
+  w = w||34; h = h||40;
+  if (team === 'argentina') {
+    return `<svg viewBox="0 0 50 60" width="${w}" height="${h}" style="vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3,3 L47,3 L47,44 L25,57 L3,44 Z" fill="#C9A227" stroke="#8B6914" stroke-width="1.5"/>
+      <path d="M7,7 L43,7 L43,42 L25,53 L7,42 Z" fill="#1A3E7A"/>
+      <rect x="7" y="21" width="36" height="9" fill="white"/>
+      <text x="25" y="39" text-anchor="middle" font-family="Georgia,serif" font-size="7.5" font-weight="bold" fill="white">AFA</text>
+      <text x="16" y="11" text-anchor="middle" font-size="7" fill="#FFD700">★</text>
+      <text x="25" y="11" text-anchor="middle" font-size="7" fill="#FFD700">★</text>
+      <text x="34" y="11" text-anchor="middle" font-size="7" fill="#FFD700">★</text>
+      <path d="M5,34 Q2,29 4,24" stroke="#C9A227" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M4,42 Q0,37 3,32" stroke="#C9A227" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M45,34 Q48,29 46,24" stroke="#C9A227" stroke-width="2" fill="none" stroke-linecap="round"/>
+      <path d="M46,42 Q50,37 47,32" stroke="#C9A227" stroke-width="2" fill="none" stroke-linecap="round"/>
+    </svg>`;
+  } else {
+    return `<svg viewBox="0 0 50 60" width="${w}" height="${h}" style="vertical-align:middle;flex-shrink:0" xmlns="http://www.w3.org/2000/svg">
+      <path d="M3,3 L47,3 L47,44 L25,57 L3,44 Z" fill="white" stroke="#CC0000" stroke-width="2.5"/>
+      <path d="M3,14 L47,30 L47,42 L3,26 Z" fill="#CC0000"/>
+      <circle cx="25" cy="46" r="10" fill="white" stroke="#CC0000" stroke-width="2"/>
+      <text x="25" y="50" text-anchor="middle" font-family="Georgia,serif" font-size="5.5" font-weight="bold" fill="#CC0000">CARP</text>
+    </svg>`;
+  }
+}
+
+function teamLabel(team, size) {
+  const name = team === 'argentina' ? 'Argentina' : 'River Plate';
+  return `<span class="team-inline">${crestSVG(team, size||28, size ? size*1.18 : 33)} ${name}</span>`;
+}
+
+// Zone names indexed by internal pos (0-5)
+const ZONE_NAMES = ['Arriba izq.(4)','Abajo izq.(1)','Centro alto(5)','Centro bajo(2)','Arriba der.(6)','Abajo der.(3)'];
+
+// Key 1-6 → internal pos
+const KEY_TO_POS = { '1':1, '2':3, '3':5, '4':0, '5':2, '6':4 };
+
+// Zone centers inside the ANIMATION SVG (absolute coords)
+// Goal: left=155, right=445, top=52, bottom=252
+const ZONE_ANIM = [
+  {x:203, y:114},  // 0 top-left
+  {x:203, y:204},  // 1 bottom-left
+  {x:300, y:114},  // 2 center-top
+  {x:300, y:204},  // 3 center-bottom
+  {x:397, y:114},  // 4 top-right
+  {x:397, y:204},  // 5 bottom-right
+];
+
+// Goalie initial position (bottom of goal, on the ground)
+const GX = 300, GY = 232;
+// Ball initial position (matches SVG translate)
+const BX = 300, BY = 355;
+
+// Goalie dive rotation per zone (diving from bottom-center)
+const DIVE_ROT = [-60, -22, 0, 5, 60, 22];
+
+// ─────────────────────────────────────────────
+// STATE
+// ─────────────────────────────────────────────
+function initState() {
+  return {
+    phase: 'p1-kick',
+    mode: 'normal',
+    sdRound: 0,
+    p1Kicks:[], p1Saves:[],
+    p2Kicks:[], p2Saves:[],
+    p1Misses:[], p2Misses:[],   // null | 'over' | 'post' | 'feet' per penalty
+    currentIdx: 0,
+    pendingChoice: null,
+    goalsP1: 0, goalsP2: 0
+  };
+}
+let state = initState();
+
+// ─────────────────────────────────────────────
+// DOM
+// ─────────────────────────────────────────────
+const gameArea       = document.getElementById('game-area');
+const handoverScreen = document.getElementById('handover-screen');
+const animScreen     = document.getElementById('animation-screen');
+const resultsScreen  = document.getElementById('results-screen');
+const phaseTitle     = document.getElementById('phase-title');
+const instruction    = document.getElementById('instruction');
+const confirmBtn     = document.getElementById('confirm-btn');
+const handoverTitle  = document.getElementById('handover-title');
+const handoverMsg    = document.getElementById('handover-msg');
+const handoverBtn    = document.getElementById('handover-btn');
+const restartBtn     = document.getElementById('restart-btn');
+const penaltiesRow   = document.getElementById('penalties-row');
+const zones          = Array.from(document.querySelectorAll('.zone'));
+
+// ─────────────────────────────────────────────
+// SCREEN HELPERS
+// ─────────────────────────────────────────────
+function showGame()     { gameArea.style.display='flex'; handoverScreen.style.display='none'; animScreen.style.display='none'; resultsScreen.style.display='none'; }
+function showHandover() { gameArea.style.display='none'; handoverScreen.style.display='flex'; animScreen.style.display='none'; resultsScreen.style.display='none'; }
+function showAnim()     { gameArea.style.display='none'; handoverScreen.style.display='none'; animScreen.style.display='flex'; resultsScreen.style.display='none'; }
+function showResults()  { gameArea.style.display='none'; handoverScreen.style.display='none'; animScreen.style.display='none'; resultsScreen.style.display='flex'; }
+
+// ─────────────────────────────────────────────
+// DOTS
+// ─────────────────────────────────────────────
+function rebuildDots(total, doneCount) {
+  penaltiesRow.innerHTML = '';
+  for (let i = 0; i < total; i++) {
+    const d = document.createElement('div');
+    d.className = 'pen-dot';
+    d.textContent = i + 1;
+    if (i < doneCount)            d.classList.add('done');
+    else if (i === doneCount)     d.classList.add('active');
+    penaltiesRow.appendChild(d);
+  }
+}
+
+// ─────────────────────────────────────────────
+// ZONE CONFIRM DISPLAY
+// ─────────────────────────────────────────────
+function resetZones() {
+  zones.forEach(z => {
+    const num = z.querySelector('.zone-num');
+    z.className = 'zone';
+    z.innerHTML = '';
+    if (num) z.appendChild(num);
+  });
+  state.pendingChoice = null;
+  confirmBtn.disabled = true;
+}
+
+function markConfirmed(list) {
+  const posMap = {};
+  list.forEach((pos,i) => { if(!posMap[pos]) posMap[pos]=[]; posMap[pos].push(i+1); });
+  Object.entries(posMap).forEach(([pos,nums]) => {
+    const z = zones[+pos];
+    z.classList.add('confirmed');
+    const c = document.createElement('div'); c.className='badge-container';
+    nums.forEach(n => { const b=document.createElement('div'); b.className='badge'; b.textContent=n; c.appendChild(b); });
+    z.appendChild(c);
+  });
+}
+
+// ─────────────────────────────────────────────
+// RENDER PHASE
+// ─────────────────────────────────────────────
+function renderPhase() {
+  resetZones();
+  const sd = state.mode === 'sudden-death';
+  const roundLabel = sd ? ` — Muerte Súbita R${state.sdRound+1}` : '';
+  const total = sd ? 1 : 5;
+
+  switch(state.phase) {
+    case 'p1-kick':
+      phaseTitle.innerHTML = `⚽ Jugador 1 — ${teamLabel('argentina')} — Elige dónde patear${roundLabel}`;
+      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
+      if(!sd) markConfirmed(state.p1Kicks);
+      rebuildDots(total, state.currentIdx);
+      break;
+    case 'p1-save':
+      phaseTitle.innerHTML = `🧤 Jugador 1 — ${teamLabel('argentina')} — Elige dónde atajar${roundLabel}`;
+      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
+      if(!sd) markConfirmed(state.p1Saves);
+      rebuildDots(total, state.currentIdx);
+      break;
+    case 'p2-kick':
+      phaseTitle.innerHTML = `⚽ Jugador 2 — ${teamLabel('river')} — Elige dónde patear${roundLabel}`;
+      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
+      if(!sd) markConfirmed(state.p2Kicks);
+      rebuildDots(total, state.currentIdx);
+      break;
+    case 'p2-save':
+      phaseTitle.innerHTML = `🧤 Jugador 2 — ${teamLabel('river')} — Elige dónde atajar${roundLabel}`;
+      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
+      if(!sd) markConfirmed(state.p2Saves);
+      rebuildDots(total, state.currentIdx);
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────
+// ZONE SELECTION (click or key 1-6, confirm with Enter/Space or button)
+// ─────────────────────────────────────────────
+function selectZone(pos) {
+  if (state.pendingChoice !== null) zones[state.pendingChoice].classList.remove('selected');
+  state.pendingChoice = pos;
+  zones[pos].classList.add('selected');
+  confirmBtn.disabled = false;
+}
+
+zones.forEach(z => {
+  z.addEventListener('click', () => selectZone(parseInt(z.dataset.pos)));
+});
+
+document.addEventListener('keydown', e => {
+  // Only active during selection phase
+  if (gameArea.style.display === 'none') return;
+  if (KEY_TO_POS[e.key] !== undefined) {
+    selectZone(KEY_TO_POS[e.key]);
+    confirmBtn.click();
+  }
+});
+
+// ─────────────────────────────────────────────
+// CONFIRM
+// ─────────────────────────────────────────────
+confirmBtn.addEventListener('click', () => {
+  if(state.pendingChoice === null) return;
+  const chosen = state.pendingChoice;
+  if     (state.phase==='p1-kick') state.p1Kicks.push(chosen);
+  else if(state.phase==='p1-save') state.p1Saves.push(chosen);
+  else if(state.phase==='p2-kick') state.p2Kicks.push(chosen);
+  else if(state.phase==='p2-save') state.p2Saves.push(chosen);
+  state.currentIdx++;
+  const limit = state.mode==='sudden-death' ? 1 : 5;
+  if(state.currentIdx >= limit) { state.currentIdx=0; advancePhase(); }
+  else renderPhase();
+});
+
+// ─────────────────────────────────────────────
+// PHASE TRANSITIONS
+// ─────────────────────────────────────────────
+function advancePhase() {
+  if(state.phase==='p1-kick') {
+    state.phase='p1-save'; renderPhase();
+
+  } else if(state.phase==='p1-save') {
+    const sd = state.mode==='sudden-death';
+    handoverTitle.innerHTML = sd ? `¡Turno del Jugador 2 — ${teamLabel('river')}! (MS R${state.sdRound+1})` : `¡Turno del Jugador 2 — ${teamLabel('river')}!`;
+    handoverMsg.textContent = 'Pasale el dispositivo al Jugador 2. El Jugador 1 ya eligió en secreto.';
+    state.phase='p2-kick';
+    showHandover();
+
+  } else if(state.phase==='p2-kick') {
+    state.phase='p2-save'; renderPhase();
+
+  } else if(state.phase==='p2-save') {
+    // Build animation queue then evaluate
+    const queue = buildAnimQueue();
+    playAnimQueue(queue, () => {
+      if(state.mode==='normal') evaluateNormal();
+      else evaluateSuddenDeath();
+    });
+  }
+}
+
+handoverBtn.addEventListener('click', () => { showGame(); renderPhase(); });
+
+// ─────────────────────────────────────────────
+// EVALUATE
+// ─────────────────────────────────────────────
+function isGoal(kicks, saves, misses, i) {
+  return kicks[i] !== saves[i] && !misses[i];
+}
+
+function evaluateNormal() {
+  let g1=0, g2=0;
+  for(let i=0;i<5;i++){
+    if(isGoal(state.p1Kicks, state.p2Saves, state.p1Misses, i)) g1++;
+    if(isGoal(state.p2Kicks, state.p1Saves, state.p2Misses, i)) g2++;
+  }
+  state.goalsP1=g1; state.goalsP2=g2;
+  if(g1===g2){
+    state.mode='sudden-death'; state.sdRound=0;
+    handoverTitle.textContent='¡Empate! — Muerte Súbita';
+    handoverMsg.textContent=`${g1}-${g2} al término de los 5 penales. Se juega de a uno hasta que haya un ganador. Empieza el Jugador 1.`;
+    state.phase='p1-kick';
+    showHandover();
+  } else {
+    showFinalResults();
+  }
+}
+
+function evaluateSuddenDeath() {
+  const idx=5+state.sdRound;
+  const g1=isGoal(state.p1Kicks, state.p2Saves, state.p1Misses, idx)?1:0;
+  const g2=isGoal(state.p2Kicks, state.p1Saves, state.p2Misses, idx)?1:0;
+  state.goalsP1+=g1; state.goalsP2+=g2;
+  if(g1!==g2){
+    showFinalResults();
+  } else {
+    state.sdRound++;
+    const detail=g1===1?'Ambos convirtieron.':'Ambos fallaron.';
+    handoverTitle.textContent=`Sigue la Muerte Súbita — Ronda ${state.sdRound+1}`;
+    handoverMsg.textContent=`${detail} Nueva ronda. Empieza el Jugador 1.`;
+    state.phase='p1-kick';
+    showHandover();
+  }
+}
+
+// ─────────────────────────────────────────────
+// FINAL RESULTS
+// ─────────────────────────────────────────────
+function showFinalResults() {
+  let g1=0, g2=0;
+  const dp1=document.getElementById('detail-p1');
+  const dp2=document.getElementById('detail-p2');
+  dp1.innerHTML=''; dp2.innerHTML='';
+  const total=state.p1Kicks.length;
+  for(let i=0;i<total;i++){
+    const goal=isGoal(state.p1Kicks, state.p2Saves, state.p1Misses, i);
+    if(goal) g1++;
+    const lbl=i<5?`${i+1}`:`MS${i-4}`;
+    dp1.innerHTML+=penaltyRow(lbl,state.p1Kicks[i],state.p2Saves[i],goal,state.p1Misses[i]);
+  }
+  for(let i=0;i<total;i++){
+    const goal=isGoal(state.p2Kicks, state.p1Saves, state.p2Misses, i);
+    if(goal) g2++;
+    const lbl=i<5?`${i+1}`:`MS${i-4}`;
+    dp2.innerHTML+=penaltyRow(lbl,state.p2Kicks[i],state.p1Saves[i],goal,state.p2Misses[i]);
+  }
+  document.getElementById('score-p1').textContent = g1;
+  document.getElementById('score-p2').textContent = g2;
+  document.getElementById('score-name-p1').innerHTML = teamLabel('argentina', 26);
+  document.getElementById('score-name-p2').innerHTML = teamLabel('river', 26);
+  document.getElementById('result-h3-p1').innerHTML = `Penales de ${teamLabel('argentina',22)} patea — ataja ${teamLabel('river',22)}`;
+  document.getElementById('result-h3-p2').innerHTML = `Penales de ${teamLabel('river',22)} patea — ataja ${teamLabel('argentina',22)}`;
+  const banner = document.getElementById('winner-banner');
+  if (g1 > g2)      banner.innerHTML = `🏆 ¡Ganó ${crestSVG('argentina',58,68)} <span>Argentina<br><small>por ${g1}–${g2}</small></span>!`;
+  else if (g2 > g1) banner.innerHTML = `🏆 ¡Ganó ${crestSVG('river',58,68)} <span>River Plate<br><small>por ${g2}–${g1}</small></span>!`;
+  else              banner.innerHTML = `🤝 &nbsp;¡Empate ${g1}–${g2}!`;
+  showResults();
+}
+
+function penaltyRow(label, kickPos, savePos, goal, miss) {
+  let icon, style;
+  if      (miss === 'over') { icon='↑ Afuera';      style='color:#ff9940;font-weight:bold'; }
+  else if (miss === 'post') { icon='🏃 Palo';        style='color:#ff9940;font-weight:bold'; }
+  else if (miss === 'feet') { icon='🦶 Pies';        style='color:#f44336;font-weight:bold'; }
+  else if (goal)            { icon='⚽ GOL';          style='color:#4caf50;font-weight:bold'; }
+  else                      { icon='🧤 Atajado';     style='color:#f44336;font-weight:bold'; }
+  return `<div class="penalty-result-row">
+    <span class="pen-num">${label}.</span>
+    <span class="kick-label">⚽ ${ZONE_NAMES[kickPos]}</span>
+    <span class="vs-label">vs</span>
+    <span class="save-label">🧤 ${ZONE_NAMES[savePos]}</span>
+    <span class="result-icon" style="${style}">${icon}</span>
+  </div>`;
+}
+
+restartBtn.addEventListener('click',()=>{ state=initState(); showGame(); renderPhase(); });
+
+// ─────────────────────────────────────────────
+// ANIMATION SYSTEM
+// ─────────────────────────────────────────────
+
+// Determine random miss type for a penalty
+function getMissType(kickZone, saveZone) {
+  const r = Math.random();
+  if ([0, 2, 4].includes(kickZone) && r < 0.10) return 'over';   // top zones → over the bar
+  if ([1, 5].includes(kickZone)    && r < 0.10) return 'post';   // side-bottom → hits post
+  if (kickZone === 3 && saveZone !== 3 && r < 0.10) return 'feet'; // center-low → saved with feet
+  return null;
+}
+
+// Build list of {label, kickZone, saveZone, kickerTeam, goalieTeam, missType}
+function buildAnimQueue() {
+  const q=[];
+  const isSD=state.mode==='sudden-death';
+  const start=isSD?5+state.sdRound:0;
+  const count=isSD?1:5;
+  for(let i=start;i<start+count;i++){
+    const pen=i<5?`Penal ${i+1}`:`MS${i-4}`;
+    const m1 = getMissType(state.p1Kicks[i], state.p2Saves[i]);
+    const m2 = getMissType(state.p2Kicks[i], state.p1Saves[i]);
+    state.p1Misses[i] = m1;
+    state.p2Misses[i] = m2;
+    q.push({label:`${pen} — ${teamLabel('argentina',20)} patea`, kickZone:state.p1Kicks[i], saveZone:state.p2Saves[i], kickerTeam:'argentina', goalieTeam:'river',      missType:m1});
+    q.push({label:`${pen} — ${teamLabel('river',20)} patea`,    kickZone:state.p2Kicks[i], saveZone:state.p1Saves[i], kickerTeam:'river',      goalieTeam:'argentina', missType:m2});
+  }
+  return q;
+}
+
+let animG1=0, animG2=0;
+
+async function playAnimQueue(queue, onComplete) {
+  animG1 = state.mode==='sudden-death' ? state.goalsP1 : 0;
+  animG2 = state.mode==='sudden-death' ? state.goalsP2 : 0;
+  showAnim();
+  for(const item of queue) await playOneAnim(item);
+  onComplete();
+}
+
+function playOneAnim(item) {
+  return new Promise(resolve => {
+    // Reset UI
+    document.getElementById('anim-label').innerHTML = item.label;
+    document.getElementById('anim-result-text').textContent = '';
+    document.getElementById('anim-result-text').className = '';
+    document.getElementById('anim-next-btn').style.display = 'none';
+    updateAnimScore();
+
+    // Draw players
+    drawKicker(item.kickerTeam);
+    drawGoalie(item.goalieTeam, false);
+
+    // Reset positions (no transition during reset)
+    const ballG   = document.getElementById('anim-ball-g');
+    const shadowG = document.getElementById('anim-ball-shadow');
+    const goalieG = document.getElementById('anim-goalie-g');
+    const bulge   = document.getElementById('anim-net-bulge');
+
+    ballG.style.transition   = 'none';
+    goalieG.style.transition = 'none';
+    bulge.style.transition   = 'none';
+
+    ballG.style.transform    = `translate(${BX}px,${BY}px)`;
+    goalieG.style.transform  = `translate(${GX}px,${GY}px)`;
+    shadowG.setAttribute('cx', BX); shadowG.setAttribute('cy', BY + 10);
+    shadowG.setAttribute('rx', '16'); shadowG.style.opacity = '0.45';
+    bulge.setAttribute('rx','0'); bulge.setAttribute('ry','0');
+    bulge.style.opacity = '0';
+
+    // Force reflow so transitions re-arm
+    ballG.getBoundingClientRect();
+
+    setTimeout(() => {
+      // Re-enable transitions
+      ballG.style.transition   = 'transform 0.72s ease-in';
+      goalieG.style.transition = 'transform 0.65s cubic-bezier(0.2,0.6,0.4,1)';
+      bulge.style.transition   = 'all 0.45s ease-out';
+
+      const rt      = document.getElementById('anim-result-text');
+      const nextBtn = document.getElementById('anim-next-btn');
+      const miss    = item.missType;
+
+      function showNext() {
+        updateAnimScore();
+        nextBtn.style.display = 'block';
+        const auto = setTimeout(resolve, 3200);
+        nextBtn.onclick = () => { clearTimeout(auto); resolve(); };
+      }
+
+      // gx/gy = where goalie ends up (for celebration jump origin)
+      function celebrate(isGoalResult, gx, gy) {
+        const kickerEl = document.getElementById('anim-kicker-g');
+        setTimeout(() => {
+          if (isGoalResult) {
+            drawKickerCelebrate(item.kickerTeam);
+            kickerEl.style.transition = 'transform 0.18s ease-out';
+            kickerEl.style.transform  = 'translate(265px,312px)';
+            setTimeout(() => {
+              kickerEl.style.transition = 'transform 0.24s ease-in';
+              kickerEl.style.transform  = 'translate(265px,348px)';
+            }, 210);
+            drawGoalieDeject(item.goalieTeam);
+            goalieG.style.transition = 'transform 0.35s ease';
+            goalieG.style.transform  = `translate(${gx}px,${gy + 14}px) rotate(0deg)`;
+          } else {
+            drawGoalieCelebrate(item.goalieTeam);
+            goalieG.style.transition = 'transform 0.18s ease-out';
+            goalieG.style.transform  = `translate(${gx}px,${gy - 32}px) rotate(0deg)`;
+            setTimeout(() => {
+              goalieG.style.transition = 'transform 0.24s ease-in';
+              goalieG.style.transform  = `translate(${gx}px,${gy}px) rotate(0deg)`;
+            }, 210);
+            drawKickerDeject(item.kickerTeam);
+          }
+        }, 420);
+      }
+
+      if (miss === 'over') {
+        const bz = ZONE_ANIM[item.kickZone];
+        ballG.style.transform = `translate(${bz.x}px, 8px)`;
+        shadowG.setAttribute('cx', bz.x); shadowG.setAttribute('cy','255');
+        shadowG.setAttribute('rx','5'); shadowG.style.opacity='0.08';
+        setTimeout(() => {
+          rt.textContent = '↑  AFUERA — Por arriba del travesaño';
+          rt.className   = 'save visible';
+          celebrate(false, GX, GY);
+          showNext();
+        }, 950);
+
+      } else if (miss === 'post') {
+        const postX = item.kickZone === 1 ? 162 : 438;
+        const bz    = ZONE_ANIM[item.kickZone];
+        ballG.style.transform = `translate(${postX}px,${bz.y}px)`;
+        shadowG.setAttribute('cx', postX); shadowG.setAttribute('cy','256');
+        shadowG.setAttribute('rx','7'); shadowG.style.opacity='0.12';
+        const gz = ZONE_ANIM[item.saveZone];
+        setTimeout(() => {
+          goalieG.style.transform = `translate(${gz.x}px,${gz.y}px) rotate(${DIVE_ROT[item.saveZone]}deg)`;
+        }, 220);
+        setTimeout(() => {
+          ballG.style.transition = 'transform 0.28s ease-out';
+          const bounceX = postX + (item.kickZone === 1 ? 28 : -28);
+          ballG.style.transform  = `translate(${bounceX}px,${bz.y + 22}px)`;
+          rt.textContent = '🏃  ¡EN EL PALO!';
+          rt.className   = 'save visible';
+          celebrate(false, gz.x, gz.y);
+          showNext();
+        }, 950);
+
+      } else if (miss === 'feet') {
+        const bz = ZONE_ANIM[3];
+        ballG.style.transform = `translate(${bz.x}px,${bz.y}px)`;
+        shadowG.setAttribute('cx', bz.x); shadowG.setAttribute('cy','258');
+        shadowG.setAttribute('rx','9'); shadowG.style.opacity='0.14';
+        setTimeout(() => {
+          goalieG.style.transform = `translate(${bz.x}px,${bz.y + 10}px) rotate(12deg)`;
+        }, 220);
+        setTimeout(() => {
+          drawGoalieFeetSave(item.goalieTeam);
+          rt.textContent = '🦶  ¡ATAJADO CON LOS PIES!';
+          rt.className   = 'save visible';
+          celebrate(false, bz.x, bz.y + 10);
+          showNext();
+        }, 950);
+
+      } else {
+        const bz = ZONE_ANIM[item.kickZone];
+        const gz = ZONE_ANIM[item.saveZone];
+        ballG.style.transform = `translate(${bz.x}px,${bz.y}px)`;
+        shadowG.setAttribute('cx', bz.x); shadowG.setAttribute('cy','260');
+        shadowG.setAttribute('rx','8'); shadowG.style.opacity='0.15';
+        setTimeout(() => {
+          goalieG.style.transform = `translate(${gz.x}px,${gz.y}px) rotate(${DIVE_ROT[item.saveZone]}deg)`;
+        }, 220);
+        setTimeout(() => {
+          const isGoal = item.kickZone !== item.saveZone;
+          if (isGoal) {
+            bulge.setAttribute('cx', bz.x); bulge.setAttribute('cy', bz.y);
+            bulge.setAttribute('rx','38');  bulge.setAttribute('ry','28');
+            bulge.style.opacity = '1';
+            rt.textContent = '⚽  G O L !';
+            rt.className   = 'goal visible';
+            if (item.kickerTeam === 'argentina') animG1++; else animG2++;
+          } else {
+            rt.textContent = '🧤  ¡ATAJADO!';
+            rt.className   = 'save visible';
+            drawGoalie(item.goalieTeam, true);
+          }
+          celebrate(isGoal, gz.x, gz.y);
+          showNext();
+        }, 950);
+      }
+    }, 420);
+  });
+}
+
+function updateAnimScore(){
+  document.getElementById('anim-scoreboard').innerHTML =
+    `${teamLabel('argentina',22)} <strong>${animG1}</strong> &nbsp;—&nbsp; <strong>${animG2}</strong> ${teamLabel('river',22)}`;
+}
+
+// ─────────────────────────────────────────────
+// PLAYER SVG BUILDERS
+// ─────────────────────────────────────────────
+
+// ── KIT COLORS ───────────────────────────────
+function kitColors(team, role) {
+  // role: 'outfield' | 'goalie'
+  if (team === 'argentina') {
+    if (role === 'goalie') return { jersey1:'#1A7A3A', jersey2:'#1A7A3A', shorts:'#111827', sock:'#1A7A3A' };
+    return { jersey1:'#74ACDF', jersey2:'white',   shorts:'#111827', sock:'#74ACDF' };
+  } else {
+    if (role === 'goalie') return { jersey1:'#F5C000', jersey2:'#F5C000', shorts:'#111827', sock:'#F5C000' };
+    return { jersey1:'white',   jersey2:'white',   shorts:'#111827', sock:'#111827' };
+  }
+}
+
+// ── JERSEY FRAGMENT ──────────────────────────
+// team = 'argentina'|'river', role = 'outfield'|'goalie', s = scale, cx/cy = chest center
+function jerseyHTML(team, s, role) {
+  s    = s    || 1;
+  role = role || 'outfield';
+  const c   = kitColors(team, role);
+  const W   = 36 * s, H = 34 * s;
+  const x0  = -W/2, y0 = -68 * s;
+
+  if (team === 'argentina' && role === 'outfield') {
+    // Blue-white vertical stripes
+    const stripeW = W / 6;
+    let strips = '';
+    for (let i = 0; i < 6; i++) {
+      const col = (i % 2 === 0) ? '#74ACDF' : 'white';
+      strips += `<rect x="${x0 + i*stripeW}" y="${y0}" width="${stripeW}" height="${H}" fill="${col}"/>`;
+    }
+    return `
+      <clipPath id="jerseyClip${team}${role}"><rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4"/></clipPath>
+      <rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4" fill="#74ACDF"/>
+      ${strips}
+      <path d="M${-5*s},${y0} L0,${y0+8*s} L${5*s},${y0}" stroke="#74ACDF" stroke-width="${1.5*s}" fill="none"/>
+    `;
+  } else if (team === 'river' && role === 'outfield') {
+    // White + red diagonal sash from top-left to bottom-right
+    return `
+      <rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4" fill="white"/>
+      <clipPath id="jerseyClipRiver"><rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4"/></clipPath>
+      <polygon points="${-4*s},${y0} ${16*s},${y0} ${6*s},${y0+H} ${-14*s},${y0+H}" fill="#CC0000" clip-path="url(#jerseyClipRiver)"/>
+      <path d="M${-5*s},${y0} L0,${y0+8*s} L${5*s},${y0}" stroke="#ccc" stroke-width="${1.5*s}" fill="none"/>
+    `;
+  } else if (team === 'argentina' && role === 'goalie') {
+    // Solid green
+    return `
+      <rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4" fill="#1A7A3A"/>
+      <rect x="${x0}" y="${y0}" width="${W}" height="${4*s}" rx="2" fill="#158030"/>
+      <path d="M${-5*s},${y0} L0,${y0+8*s} L${5*s},${y0}" stroke="#158030" stroke-width="${1.5*s}" fill="none"/>
+    `;
+  } else {
+    // River goalie: solid yellow
+    return `
+      <rect x="${x0}" y="${y0}" width="${W}" height="${H}" rx="4" fill="#F5C000"/>
+      <rect x="${x0}" y="${y0}" width="${W}" height="${4*s}" rx="2" fill="#D9A800"/>
+      <path d="M${-5*s},${y0} L0,${y0+8*s} L${5*s},${y0}" stroke="#D9A800" stroke-width="${1.5*s}" fill="none"/>
+    `;
+  }
+}
+
+// ── HEAD FRAGMENT ─────────────────────────────
+function headHTML(hair, cx, cy, s, happy) {
+  s   = s   || 1;
+  cx  = cx  || 0;
+  cy  = cy  || 0;
+  const r = 13 * s;
+  const skin = '#F5C5A0';
+  const eyY  = cy - 2 * s;
+  const mouthPath = happy
+    ? `M${cx-4*s},${cy+5*s} Q${cx},${cy+8*s} ${cx+4*s},${cy+5*s}`
+    : `M${cx-3*s},${cy+5*s} L${cx+3*s},${cy+5*s}`;
+  return `
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="${skin}"/>
+    <path d="M${cx-r},${cy-2*s} Q${cx},${cy-r*1.6} ${cx+r},${cy-2*s} Q${cx+r},${cy-r*0.5} ${cx+r*0.85},${cy+r*0.15} Q${cx},${cy+r*0.35} ${cx-r*0.85},${cy+r*0.15} Q${cx-r},${cy-r*0.5} ${cx-r},${cy-2*s}Z" fill="${hair}"/>
+    <ellipse cx="${cx-r}" cy="${cy}" rx="${2.5*s}" ry="${3.5*s}" fill="${skin}"/>
+    <ellipse cx="${cx+r}" cy="${cy}" rx="${2.5*s}" ry="${3.5*s}" fill="${skin}"/>
+    <circle cx="${cx-4*s}" cy="${eyY}" r="${1.8*s}" fill="#2a1505"/>
+    <circle cx="${cx+4*s}" cy="${eyY}" r="${1.8*s}" fill="#2a1505"/>
+    <circle cx="${cx-3.4*s}" cy="${eyY-0.6*s}" r="${0.6*s}" fill="white"/>
+    <circle cx="${cx+4.6*s}" cy="${eyY-0.6*s}" r="${0.6*s}" fill="white"/>
+    <path d="${mouthPath}" stroke="#c08060" stroke-width="${1.3*s}" fill="none"/>
+    <path d="M${cx},${cy-1.5*s} Q${cx+2*s},${cy+0.5*s} ${cx},${cy+1.5*s}" stroke="#d0a080" stroke-width="${0.9*s}" fill="none"/>
+  `;
+}
+
+// ── KICKER ────────────────────────────────────
+function drawKicker(team) {
+  const skin  = '#F5C5A0';
+  const hair  = team === 'argentina' ? '#5a3010' : '#111';
+  const boot  = '#1A1A1A';
+  const c     = kitColors(team, 'outfield');
+  const g     = document.getElementById('anim-kicker-g');
+
+  g.innerHTML = `
+    <defs>
+      <radialGradient id="bodyShade" cx="40%" cy="30%" r="65%">
+        <stop offset="0%" stop-color="white" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="black" stop-opacity="0.15"/>
+      </radialGradient>
+    </defs>
+    <!-- ground shadow -->
+    <ellipse cx="2" cy="4" rx="26" ry="7" fill="rgba(0,0,0,0.32)"/>
+
+    <!-- STANDING LEG (left, behind) -->
+    <!-- thigh -->
+    <path d="M-10,-30 Q-16,-14 -14,2" stroke="${c.shorts}" stroke-width="14" fill="none" stroke-linecap="round"/>
+    <!-- shin + sock -->
+    <path d="M-14,2 Q-15,14 -14,22" stroke="${c.sock}" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <!-- boot -->
+    <ellipse cx="-14" cy="24" rx="13" ry="6" fill="${boot}" transform="rotate(5,-14,24)"/>
+    <ellipse cx="-12" cy="21" rx="5" ry="2" fill="#333" opacity="0.5"/>
+
+    <!-- KICKING LEG (right, forward) -->
+    <!-- thigh swinging forward -->
+    <path d="M8,-30 Q32,-18 30,0" stroke="${skin}" stroke-width="13" fill="none" stroke-linecap="round"/>
+    <!-- shin bent back -->
+    <path d="M30,0 Q26,16 22,22" stroke="${c.sock}" stroke-width="10" fill="none" stroke-linecap="round"/>
+    <!-- kicking boot (toe pointing at ball) -->
+    <ellipse cx="20" cy="23" rx="14" ry="6" fill="${boot}" transform="rotate(-30,20,23)"/>
+    <ellipse cx="22" cy="20" rx="5" ry="2" fill="#444" opacity="0.5" transform="rotate(-30,22,20)"/>
+
+    <!-- SHORTS (over hips) -->
+    <ellipse cx="-1" cy="-28" rx="18" ry="10" fill="${c.shorts}"/>
+    <rect x="-18" y="-40" width="36" height="14" rx="3" fill="${c.shorts}"/>
+
+    <!-- JERSEY BODY -->
+    ${jerseyHTML(team, 1, 'outfield')}
+    <!-- 3D shine on jersey -->
+    <ellipse cx="-4" cy="-55" rx="7" ry="10" fill="white" opacity="0.12" transform="rotate(-10,-4,-55)"/>
+
+    <!-- BACK ARM (left, swinging back for balance) -->
+    <path d="M-16,-58 Q-38,-42 -40,-28" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-40" cy="-28" r="6" fill="${skin}"/>
+
+    <!-- FRONT ARM (right, extended forward) -->
+    <path d="M16,-58 Q38,-46 42,-32" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="42" cy="-32" r="6" fill="${skin}"/>
+
+    <!-- NECK -->
+    <rect x="-5" y="-78" width="10" height="14" rx="4" fill="${skin}"/>
+
+    <!-- HEAD -->
+    ${headHTML(hair, 0, -92, 1, false)}
+  `;
+}
+
+// ── GOALKEEPER ────────────────────────────────
+function drawGoalie(team, catching) {
+  const skin  = '#F5C5A0';
+  const hair  = team === 'argentina' ? '#5a3010' : '#111';
+  const boot  = '#1A1A1A';
+  const glove = '#E8B800';
+  const c     = kitColors(team, 'goalie');
+  const g     = document.getElementById('anim-goalie-g');
+
+  if (catching) {
+    g.innerHTML = `
+      <!-- shadow -->
+      <ellipse cx="0" cy="8" rx="18" ry="5" fill="rgba(0,0,0,0.25)"/>
+
+      <!-- LEGS (standing) -->
+      <path d="M-8,-20 Q-12,-4 -11,8" stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <path d="M8,-20  Q12,-4  11,8"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <ellipse cx="-11" cy="10" rx="12" ry="5.5" fill="${boot}"/>
+      <ellipse cx="11"  cy="10" rx="12" ry="5.5" fill="${boot}"/>
+      <ellipse cx="-9"  cy="7"  rx="4"  ry="1.8" fill="#333" opacity="0.45"/>
+      <ellipse cx="9"   cy="7"  rx="4"  ry="1.8" fill="#333" opacity="0.45"/>
+
+      <!-- SHORTS -->
+      <ellipse cx="0" cy="-18" rx="16" ry="8" fill="${c.shorts}"/>
+      <rect x="-16" y="-28" width="32" height="12" rx="3" fill="${c.shorts}"/>
+
+      <!-- JERSEY -->
+      ${jerseyHTML(team, 0.9, 'goalie')}
+      <ellipse cx="-3" cy="-56" rx="7" ry="9" fill="white" opacity="0.12" transform="rotate(-10,-3,-56)"/>
+
+      <!-- ARMS: both in front holding ball -->
+      <path d="M-14,-54 Q-22,-42 -20,-28" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <path d="M14,-54  Q22,-42  20,-28" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <circle cx="-20" cy="-28" r="10" fill="${glove}"/>
+      <circle cx="20"  cy="-28" r="10" fill="${glove}"/>
+      <!-- glove fingers -->
+      <path d="M-25,-36 L-30,-42" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M-20,-37 L-23,-44" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M25,-36  L30,-42"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M20,-37  L23,-44"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <!-- ball between gloves -->
+      <circle cx="0" cy="-22" r="15" fill="url(#ballGrad)" stroke="#ccc" stroke-width="1.2"/>
+      <path d="M0,-30 L8,-24 L5,-14 L-5,-14 L-8,-24Z" fill="#333" opacity="0.45"/>
+
+      <!-- NECK -->
+      <rect x="-5" y="-76" width="10" height="14" rx="4" fill="${skin}"/>
+      <!-- HEAD (happy) -->
+      ${headHTML(hair, 0, -90, 0.95, true)}
+    `;
+  } else {
+    g.innerHTML = `
+      <!-- shadow -->
+      <ellipse cx="0" cy="8" rx="18" ry="5" fill="rgba(0,0,0,0.25)"/>
+
+      <!-- LEGS (slightly bent, ready) -->
+      <path d="M-8,-20 Q-14,-6 -12,8" stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <path d="M8,-20  Q14,-6  12,8"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <ellipse cx="-12" cy="10" rx="12" ry="5.5" fill="${boot}"/>
+      <ellipse cx="12"  cy="10" rx="12" ry="5.5" fill="${boot}"/>
+      <ellipse cx="-10" cy="7"  rx="4"  ry="1.8" fill="#333" opacity="0.45"/>
+      <ellipse cx="10"  cy="7"  rx="4"  ry="1.8" fill="#333" opacity="0.45"/>
+
+      <!-- SHORTS -->
+      <ellipse cx="0" cy="-18" rx="16" ry="8" fill="${c.shorts}"/>
+      <rect x="-16" y="-28" width="32" height="12" rx="3" fill="${c.shorts}"/>
+
+      <!-- JERSEY -->
+      ${jerseyHTML(team, 0.9, 'goalie')}
+      <ellipse cx="-3" cy="-56" rx="7" ry="9" fill="white" opacity="0.12" transform="rotate(-10,-3,-56)"/>
+
+      <!-- ARMS spread wide -->
+      <path d="M-14,-54 Q-42,-40 -52,-28" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <path d="M14,-54  Q42,-40  52,-28" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+      <circle cx="-52" cy="-28" r="10" fill="${glove}"/>
+      <circle cx="52"  cy="-28" r="10" fill="${glove}"/>
+      <!-- glove fingers -->
+      <path d="M-57,-36 L-63,-42" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M-52,-38 L-55,-45" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M57,-36  L63,-42"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+      <path d="M52,-38  L55,-45"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+
+      <!-- NECK -->
+      <rect x="-5" y="-76" width="10" height="14" rx="4" fill="${skin}"/>
+      <!-- HEAD (focused) -->
+      ${headHTML(hair, 0, -90, 0.95, false)}
+    `;
+  }
+}
+
+// ── GOALKEEPER FEET SAVE POSE ─────────────────
+function drawGoalieFeetSave(team) {
+  const skin  = '#F5C5A0';
+  const hair  = team === 'argentina' ? '#5a3010' : '#111';
+  const boot  = '#1A1A1A';
+  const glove = '#E8B800';
+  const c     = kitColors(team, 'goalie');
+  const g     = document.getElementById('anim-goalie-g');
+
+  g.innerHTML = `
+    <!-- shadow -->
+    <ellipse cx="0" cy="20" rx="30" ry="6" fill="rgba(0,0,0,0.28)"/>
+
+    <!-- LEGS extended horizontally (slide tackle pose) -->
+    <path d="-32,2 Q-22,-4 0,-4 Q22,-4 32,2" stroke="${c.sock}" stroke-width="0" fill="none"/>
+    <rect x="-34" y="-4" width="68" height="12" rx="6" fill="${c.sock}"/>
+    <!-- boots at each end -->
+    <ellipse cx="-36" cy="4"  rx="14" ry="6" fill="${boot}"/>
+    <ellipse cx="36"  cy="4"  rx="14" ry="6" fill="${boot}"/>
+    <ellipse cx="-34" cy="2"  rx="5" ry="2.2" fill="#333" opacity="0.45"/>
+    <ellipse cx="34"  cy="2"  rx="5" ry="2.2" fill="#333" opacity="0.45"/>
+
+    <!-- TORSO propped up -->
+    <rect x="-14" y="-36" width="28" height="36" rx="5" fill="${c.shorts}"/>
+    ${jerseyHTML(team, 0.9, 'goalie')}
+    <ellipse cx="-3" cy="-30" rx="6" ry="8" fill="white" opacity="0.12" transform="rotate(-10,-3,-30)"/>
+
+    <!-- ARMS braced on ground -->
+    <path d="-14,-40 Q-28,-24 -30,-10" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="14,-40  Q28,-24  30,-10"  stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-30" cy="-10" r="9" fill="${glove}"/>
+    <circle cx="30"  cy="-10" r="9" fill="${glove}"/>
+
+    <!-- NECK -->
+    <rect x="-5" y="-72" width="10" height="14" rx="4" fill="${skin}"/>
+    <!-- HEAD looking down -->
+    ${headHTML(hair, 0, -85, 0.9, false)}
+
+    <!-- BALL stopped by feet -->
+    <circle cx="0" cy="14" r="14" fill="url(#ballGrad)" stroke="#ccc" stroke-width="1.2"/>
+    <path d="M0,6 L7.6,12 L4.7,22 L-4.7,22 L-7.6,12Z" fill="#333" opacity="0.45"/>
+  `;
+}
+
+// ── KICKER CELEBRATE (salto con brazos en alto) ──
+function drawKickerCelebrate(team) {
+  const skin = '#F5C5A0';
+  const hair = team === 'argentina' ? '#5a3010' : '#111';
+  const boot = '#1A1A1A';
+  const c    = kitColors(team, 'outfield');
+  const g    = document.getElementById('anim-kicker-g');
+  g.innerHTML = `
+    <ellipse cx="0" cy="4" rx="22" ry="6" fill="rgba(0,0,0,0.28)"/>
+    <!-- Both legs bent upward (mid-jump) -->
+    <path d="M-8,-24 Q-18,-10 -16,4"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M8,-24  Q18,-10  16,4"   stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <ellipse cx="-16" cy="6"  rx="12" ry="5.5" fill="${boot}"/>
+    <ellipse cx="16"  cy="6"  rx="12" ry="5.5" fill="${boot}"/>
+    <!-- Shorts -->
+    <ellipse cx="0" cy="-22" rx="17" ry="9" fill="${c.shorts}"/>
+    <rect x="-17" y="-32" width="34" height="12" rx="3" fill="${c.shorts}"/>
+    <!-- Jersey -->
+    ${jerseyHTML(team, 1, 'outfield')}
+    <!-- Arms raised in V -->
+    <path d="M-16,-58 Q-44,-80 -48,-96" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M16,-58  Q44,-80  48,-96"  stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-48" cy="-96" r="7" fill="${skin}"/>
+    <circle cx="48"  cy="-96" r="7" fill="${skin}"/>
+    <!-- Neck -->
+    <rect x="-5" y="-78" width="10" height="14" rx="4" fill="${skin}"/>
+    <!-- Head (festejo: sonrisa grande) -->
+    <circle cx="0" cy="-92" r="14" fill="${skin}"/>
+    <path d="M-14,-94 Q0,-110 14,-94 Q14,-86 12,-82 Q0,-80 -12,-82 Q-14,-86 -14,-94Z" fill="${hair}"/>
+    <ellipse cx="-14" cy="-92" rx="3" ry="4" fill="${skin}"/>
+    <ellipse cx="14"  cy="-92" rx="3" ry="4" fill="${skin}"/>
+    <circle cx="-5"  cy="-94" r="2.2" fill="#2a1505"/>
+    <circle cx="5"   cy="-94" r="2.2" fill="#2a1505"/>
+    <circle cx="-4.2" cy="-94.8" r="0.7" fill="white"/>
+    <circle cx="5.8"  cy="-94.8" r="0.7" fill="white"/>
+    <path d="M-6,-86 Q0,-81 6,-86" stroke="#c04040" stroke-width="1.8" fill="none"/>
+    <path d="M-6,-86 Q0,-83 6,-86" fill="#c04040" opacity="0.4"/>
+  `;
+}
+
+// ── KICKER DEJECT (llorando, cabizbajo) ──
+function drawKickerDeject(team) {
+  const skin = '#F5C5A0';
+  const hair = team === 'argentina' ? '#5a3010' : '#111';
+  const boot = '#1A1A1A';
+  const c    = kitColors(team, 'outfield');
+  const g    = document.getElementById('anim-kicker-g');
+  g.innerHTML = `
+    <ellipse cx="0" cy="4" rx="20" ry="5" fill="rgba(0,0,0,0.25)"/>
+    <!-- Legs standing, knees slightly bent -->
+    <path d="M-8,-24 Q-12,-8 -11,6"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M8,-24  Q12,-8  11,6"   stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <ellipse cx="-11" cy="8"  rx="12" ry="5.5" fill="${boot}"/>
+    <ellipse cx="11"  cy="8"  rx="12" ry="5.5" fill="${boot}"/>
+    <!-- Shorts -->
+    <ellipse cx="0" cy="-22" rx="17" ry="9" fill="${c.shorts}"/>
+    <rect x="-17" y="-32" width="34" height="12" rx="3" fill="${c.shorts}"/>
+    <!-- Jersey -->
+    ${jerseyHTML(team, 1, 'outfield')}
+    <!-- Arms: manos en la cabeza -->
+    <path d="M-16,-58 Q-28,-70 -22,-84" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M16,-58  Q28,-70  22,-84"  stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-22" cy="-84" r="7" fill="${skin}"/>
+    <circle cx="22"  cy="-84" r="7" fill="${skin}"/>
+    <!-- Neck -->
+    <rect x="-5" y="-76" width="10" height="12" rx="4" fill="${skin}"/>
+    <!-- Head inclinada hacia abajo -->
+    <circle cx="0" cy="-88" r="13" fill="${skin}"/>
+    <path d="M-13,-90 Q0,-104 13,-90 Q13,-82 11,-78 Q0,-76 -11,-78 Q-13,-82 -13,-90Z" fill="${hair}"/>
+    <ellipse cx="-13" cy="-88" rx="2.5" ry="3.5" fill="${skin}"/>
+    <ellipse cx="13"  cy="-88" rx="2.5" ry="3.5" fill="${skin}"/>
+    <circle cx="-4"  cy="-90" r="2" fill="#2a1505"/>
+    <circle cx="4"   cy="-90" r="2" fill="#2a1505"/>
+    <!-- Closed sad eyes -->
+    <path d="M-6,-91 Q-4,-93 -2,-91" stroke="#2a1505" stroke-width="1.5" fill="none"/>
+    <path d="M2,-91  Q4,-93  6,-91"  stroke="#2a1505" stroke-width="1.5" fill="none"/>
+    <!-- Sad mouth -->
+    <path d="M-4,-83 Q0,-86 4,-83" stroke="#c08060" stroke-width="1.5" fill="none"/>
+    <!-- Tears -->
+    <ellipse cx="-6" cy="-86" rx="1.5" ry="2.5" fill="#88ccff" opacity="0.8"/>
+    <ellipse cx="6"  cy="-86" rx="1.5" ry="2.5" fill="#88ccff" opacity="0.8"/>
+  `;
+}
+
+// ── GOALIE CELEBRATE (salto con brazos en alto) ──
+function drawGoalieCelebrate(team) {
+  const skin  = '#F5C5A0';
+  const hair  = team === 'argentina' ? '#5a3010' : '#111';
+  const boot  = '#1A1A1A';
+  const glove = '#E8B800';
+  const c     = kitColors(team, 'goalie');
+  const g     = document.getElementById('anim-goalie-g');
+  g.innerHTML = `
+    <ellipse cx="0" cy="12" rx="20" ry="6" fill="rgba(0,0,0,0.28)"/>
+    <!-- Legs bent mid-jump -->
+    <path d="M-8,-20 Q-18,-6 -16,8"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M8,-20  Q18,-6  16,8"   stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <ellipse cx="-16" cy="10" rx="12" ry="5.5" fill="${boot}"/>
+    <ellipse cx="16"  cy="10" rx="12" ry="5.5" fill="${boot}"/>
+    <!-- Shorts -->
+    <ellipse cx="0" cy="-18" rx="17" ry="9" fill="${c.shorts}"/>
+    <rect x="-17" y="-28" width="34" height="12" rx="3" fill="${c.shorts}"/>
+    <!-- Jersey -->
+    ${jerseyHTML(team, 0.9, 'goalie')}
+    <!-- Arms raised in V with gloves -->
+    <path d="M-14,-54 Q-44,-76 -48,-92" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M14,-54  Q44,-76  48,-92"  stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-48" cy="-92" r="11" fill="${glove}"/>
+    <circle cx="48"  cy="-92" r="11" fill="${glove}"/>
+    <path d="M-53,-100 L-58,-106" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M-48,-102 L-51,-109" stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M53,-100  L58,-106"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+    <path d="M48,-102  L51,-109"  stroke="#c89800" stroke-width="2.5" stroke-linecap="round"/>
+    <!-- Neck -->
+    <rect x="-5" y="-74" width="10" height="14" rx="4" fill="${skin}"/>
+    <!-- Head -->
+    <circle cx="0" cy="-88" r="13" fill="${skin}"/>
+    <path d="M-13,-90 Q0,-104 13,-90 Q13,-82 11,-78 Q0,-76 -11,-78 Q-13,-82 -13,-90Z" fill="${hair}"/>
+    <ellipse cx="-13" cy="-88" rx="2.5" ry="3.5" fill="${skin}"/>
+    <ellipse cx="13"  cy="-88" rx="2.5" ry="3.5" fill="${skin}"/>
+    <circle cx="-4"  cy="-90" r="2"   fill="#2a1505"/>
+    <circle cx="4"   cy="-90" r="2"   fill="#2a1505"/>
+    <circle cx="-3.3" cy="-90.7" r="0.7" fill="white"/>
+    <circle cx="4.7"  cy="-90.7" r="0.7" fill="white"/>
+    <path d="M-5,-82 Q0,-78 5,-82" stroke="#c04040" stroke-width="1.8" fill="none"/>
+    <path d="M-5,-82 Q0,-80 5,-82" fill="#c04040" opacity="0.35"/>
+  `;
+}
+
+// ── GOALIE DEJECT (arrodillado, cabizbajo) ──
+function drawGoalieDeject(team) {
+  const skin  = '#F5C5A0';
+  const hair  = team === 'argentina' ? '#5a3010' : '#111';
+  const boot  = '#1A1A1A';
+  const glove = '#E8B800';
+  const c     = kitColors(team, 'goalie');
+  const g     = document.getElementById('anim-goalie-g');
+  g.innerHTML = `
+    <ellipse cx="0" cy="14" rx="22" ry="6" fill="rgba(0,0,0,0.28)"/>
+    <!-- Legs kneeling: bent back under body -->
+    <path d="M-8,-10 Q-14,4 -12,14"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M8,-10  Q14,4   12,14"  stroke="${c.sock}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <ellipse cx="-18" cy="14" rx="14" ry="5" fill="${boot}" transform="rotate(10,-18,14)"/>
+    <ellipse cx="18"  cy="14" rx="14" ry="5" fill="${boot}" transform="rotate(-10,18,14)"/>
+    <!-- Shorts -->
+    <rect x="-16" y="-22" width="32" height="16" rx="4" fill="${c.shorts}"/>
+    <!-- Jersey -->
+    ${jerseyHTML(team, 0.9, 'goalie')}
+    <!-- Arms down on knees -->
+    <path d="M-14,-48 Q-20,-32 -18,-18" stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <path d="M14,-48  Q20,-32  18,-18"  stroke="${skin}" stroke-width="11" fill="none" stroke-linecap="round"/>
+    <circle cx="-18" cy="-18" r="9" fill="${glove}"/>
+    <circle cx="18"  cy="-18" r="9" fill="${glove}"/>
+    <!-- Neck -->
+    <rect x="-5" y="-70" width="10" height="12" rx="4" fill="${skin}"/>
+    <!-- Head bowed forward -->
+    <circle cx="0" cy="-82" r="13" fill="${skin}"/>
+    <path d="M-13,-84 Q0,-98 13,-84 Q13,-76 11,-72 Q0,-70 -11,-72 Q-13,-76 -13,-84Z" fill="${hair}"/>
+    <ellipse cx="-13" cy="-82" rx="2.5" ry="3.5" fill="${skin}"/>
+    <ellipse cx="13"  cy="-82" rx="2.5" ry="3.5" fill="${skin}"/>
+    <circle cx="-4"  cy="-84" r="2" fill="#2a1505"/>
+    <circle cx="4"   cy="-84" r="2" fill="#2a1505"/>
+    <path d="M-6,-85 Q-4,-87 -2,-85" stroke="#2a1505" stroke-width="1.5" fill="none"/>
+    <path d="M2,-85  Q4,-87  6,-85"  stroke="#2a1505" stroke-width="1.5" fill="none"/>
+    <path d="M-4,-77 Q0,-80 4,-77" stroke="#c08060" stroke-width="1.5" fill="none"/>
+    <!-- Tears -->
+    <ellipse cx="-5" cy="-79" rx="1.5" ry="2.5" fill="#88ccff" opacity="0.8"/>
+    <ellipse cx="5"  cy="-79" rx="1.5" ry="2.5" fill="#88ccff" opacity="0.8"/>
+  `;
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+showGame();
+renderPhase();
+</script>
+</body>
+</html>
