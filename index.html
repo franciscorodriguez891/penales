@@ -317,6 +317,20 @@
   }
   #champ-name-input:focus { border-color: #ffd700; }
   #champ-registered-msg { color: #4caf50; font-weight: bold; }
+
+  /* ── RESULTADO INDIVIDUAL DE PENAL ──────────── */
+  #pen-result-card {
+    display:none; flex-direction:column; align-items:center; gap:10px;
+    background:rgba(0,0,0,0.55); border-radius:18px; padding:22px 20px;
+    width:100%; text-align:center; cursor:pointer;
+  }
+  #prc-label { font-size:0.8rem; color:rgba(255,255,255,0.6); letter-spacing:1px; text-transform:uppercase; }
+  #prc-verdict { font-size:2.2rem; font-weight:900; }
+  .prc-goal { color:#4caf50; }
+  .prc-save { color:#f44336; }
+  #prc-zones { font-size:0.82rem; color:rgba(255,255,255,0.65); }
+  #prc-score { font-size:1.35rem; font-weight:bold; margin-top:4px; }
+  #prc-tap   { font-size:0.72rem; color:rgba(255,255,255,0.35); margin-top:4px; }
 </style>
 </head>
 <body>
@@ -470,6 +484,13 @@
     <div class="zone" data-pos="5"><span class="zone-num">3</span></div>
   </div>
   <div id="penalties-row"></div>
+  <div id="pen-result-card">
+    <div id="prc-label"></div>
+    <div id="prc-verdict"></div>
+    <div id="prc-zones"></div>
+    <div id="prc-score"></div>
+    <div id="prc-tap">Tocá para continuar</div>
+  </div>
   <div id="instruction"></div>
   <button class="btn btn-primary" id="confirm-btn" disabled>Confirmar</button>
 </div>
@@ -812,9 +833,11 @@ function initState() {
     phase: 'p1-kick',
     mode: 'normal',
     sdRound: 0,
+    penIdx: 0,          // one-by-one: which penalty we're on (0-4)
+    p2KickPending: null,// one-by-one arcade: CPU kick stored before player saves
     p1Kicks:[], p1Saves:[],
     p2Kicks:[], p2Saves:[],
-    p1Misses:[], p2Misses:[],   // null | 'over' | 'post' | 'feet' per penalty
+    p1Misses:[], p2Misses:[],
     currentIdx: 0,
     pendingChoice: null,
     goalsP1: 0, goalsP2: 0
@@ -916,22 +939,51 @@ function markConfirmed(list) {
 function renderPhase() {
   resetZones();
   const sd = state.mode === 'sudden-death';
+
+  if (gameMode === 'single' || gameMode === 'arcade') {
+    // ── Modo uno-por-uno ──
+    const penLabel = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
+    rebuildDots(sd ? state.sdRound+1 : 5, sd ? 0 : state.penIdx);
+    const rivalLabel = (gameMode==='arcade' && arcadeOpponent)
+      ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : teamLabel('river',16);
+    const scoreStr = `🇦🇷 ${state.goalsP1} – ${state.goalsP2} ${rivalLabel}`;
+    switch(state.phase) {
+      case 'p1-kick':
+        phaseTitle.innerHTML = gameMode==='arcade'
+          ? `⚽ Argentina patea — <small>${penLabel}</small>`
+          : `⚽ J1 ${teamLabel('argentina',16)} patea — <small>${penLabel}</small>`;
+        instruction.textContent = scoreStr;
+        break;
+      case 'p1-save':
+        phaseTitle.innerHTML = gameMode==='arcade'
+          ? `🧤 Argentina ataja — <small>${penLabel}</small>`
+          : `🧤 J1 ${teamLabel('argentina',16)} ataja — <small>${penLabel}</small>`;
+        instruction.textContent = scoreStr;
+        break;
+      case 'p2-kick':
+        phaseTitle.innerHTML = `⚽ J2 ${teamLabel('river',16)} patea — <small>${penLabel}</small>`;
+        instruction.textContent = scoreStr;
+        break;
+      case 'p2-save':
+        phaseTitle.innerHTML = `🧤 J2 ${teamLabel('river',16)} ataja — <small>${penLabel}</small>`;
+        instruction.textContent = scoreStr;
+        break;
+    }
+    return;
+  }
+
+  // ── Multijugador: 5 penales a la vez ──
   const roundLabel = sd ? ` — Muerte Súbita R${state.sdRound+1}` : '';
   const total = sd ? 1 : 5;
-
   switch(state.phase) {
     case 'p1-kick':
-      phaseTitle.innerHTML = gameMode==='arcade'
-        ? `⚽ 🇦🇷 Argentina — Elegí dónde patear${roundLabel}`
-        : `⚽ Jugador 1 — ${teamLabel('argentina')} — Elige dónde patear${roundLabel}`;
+      phaseTitle.innerHTML = `⚽ Jugador 1 — ${teamLabel('argentina')} — Elige dónde patear${roundLabel}`;
       instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
       if(!sd) markConfirmed(state.p1Kicks);
       rebuildDots(total, state.currentIdx);
       break;
     case 'p1-save':
-      phaseTitle.innerHTML = gameMode==='arcade'
-        ? `🧤 🇦🇷 Argentina — Elegí dónde atajar${roundLabel}`
-        : `🧤 Jugador 1 — ${teamLabel('argentina')} — Elige dónde atajar${roundLabel}`;
+      phaseTitle.innerHTML = `🧤 Jugador 1 — ${teamLabel('argentina')} — Elige dónde atajar${roundLabel}`;
       instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
       if(!sd) markConfirmed(state.p1Saves);
       rebuildDots(total, state.currentIdx);
@@ -961,8 +1013,16 @@ function selectZone(pos) {
   confirmBtn.disabled = false;
 }
 
+const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
+
 zones.forEach(z => {
-  z.addEventListener('click', () => selectZone(parseInt(z.dataset.pos)));
+  z.addEventListener('click', () => {
+    selectZone(parseInt(z.dataset.pos));
+    // En dispositivos táctiles (single/arcade) la zona seleccionada se confirma sola
+    if (isTouchDevice && (gameMode === 'single' || gameMode === 'arcade')) {
+      confirmBtn.click();
+    }
+  });
 });
 
 document.addEventListener('keydown', e => {
@@ -978,17 +1038,203 @@ document.addEventListener('keydown', e => {
 // CONFIRM
 // ─────────────────────────────────────────────
 confirmBtn.addEventListener('click', () => {
-  if(state.pendingChoice === null) return;
+  if (state.pendingChoice === null) return;
   const chosen = state.pendingChoice;
+
+  if (gameMode === 'single' || gameMode === 'arcade') {
+    advancePenalty(chosen);
+    return;
+  }
+
+  // ── Multijugador: acumular 5 elecciones ──
   if     (state.phase==='p1-kick') state.p1Kicks.push(chosen);
   else if(state.phase==='p1-save') state.p1Saves.push(chosen);
   else if(state.phase==='p2-kick') state.p2Kicks.push(chosen);
   else if(state.phase==='p2-save') state.p2Saves.push(chosen);
   state.currentIdx++;
   const limit = state.mode==='sudden-death' ? 1 : 5;
-  if(state.currentIdx >= limit) { state.currentIdx=0; advancePhase(); }
+  if (state.currentIdx >= limit) { state.currentIdx=0; advancePhase(); }
   else renderPhase();
 });
+
+// ─────────────────────────────────────────────
+// UNO POR UNO — single y arcade
+// ─────────────────────────────────────────────
+const ZONE_NUM = [4, 1, 5, 2, 6, 3]; // pos → número visible en la zona
+
+function showPenResult({ label, kickerName, saverName, kickZone, saveZone, goal, onDone }) {
+  // Ocultar selector de zona
+  document.getElementById('goal-wrapper').style.display = 'none';
+  document.getElementById('instruction').style.display  = 'none';
+  confirmBtn.style.display = 'none';
+
+  const card = document.getElementById('pen-result-card');
+  document.getElementById('prc-label').textContent   = label;
+  document.getElementById('prc-verdict').textContent = goal ? '⚽ ¡GOOOOL!' : '🧤 ¡ATAJADO!';
+  document.getElementById('prc-verdict').className   = goal ? 'prc-goal' : 'prc-save';
+  document.getElementById('prc-zones').textContent   =
+    `${kickerName} → zona ${ZONE_NUM[kickZone]}  |  ${saverName} → zona ${ZONE_NUM[saveZone]}`;
+  const rivLabel = (gameMode==='arcade' && arcadeOpponent)
+    ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'Rival';
+  document.getElementById('prc-score').innerHTML =
+    `🇦🇷 Argentina <strong>${state.goalsP1}</strong> – <strong>${state.goalsP2}</strong> ${rivLabel}`;
+  card.style.display = 'flex';
+
+  const proceed = () => {
+    card.removeEventListener('click', proceed);
+    clearTimeout(tid);
+    card.style.display = 'none';
+    document.getElementById('goal-wrapper').style.display = '';
+    document.getElementById('instruction').style.display  = '';
+    confirmBtn.style.display = '';
+    onDone();
+  };
+  card.addEventListener('click', proceed);
+  const tid = setTimeout(proceed, 2200);
+}
+
+function endNormalPenalties() {
+  const g1 = state.goalsP1, g2 = state.goalsP2;
+  if (g1 === g2) {
+    if (gameMode==='arcade' && (arcadeState.stage==='group' || arcadeState.stage==='r32')) {
+      arcadeMatchDone(null); return;
+    }
+    state.mode = 'sudden-death'; state.sdRound = 0; state.penIdx = 0; state.phase = 'p1-kick';
+    if (gameMode === 'arcade') { showGame(); renderPhase(); }
+    else {
+      handoverTitle.innerHTML = `¡Empate! — Muerte Súbita`;
+      handoverMsg.textContent = `${g1} – ${g2} tras los 5 penales. Se juega de a uno hasta que haya ganador.`;
+      showHandover();
+    }
+  } else {
+    if (gameMode === 'arcade') arcadeMatchDone(g1 > g2);
+    else showFinalResults();
+  }
+}
+
+function endSuddenDeath(argGoalThisRound, rivGoalThisRound) {
+  if (argGoalThisRound !== rivGoalThisRound) {
+    // Penal decisivo
+    if (argGoalThisRound) state.goalsP1++;
+    else                  state.goalsP2++;
+    if (gameMode === 'arcade') arcadeMatchDone(argGoalThisRound);
+    else showFinalResults();
+  } else {
+    // Empate en esta ronda → siguiente
+    state.sdRound++;
+    state.penIdx = 0; state.phase = 'p1-kick';
+    if (gameMode === 'arcade') { showGame(); renderPhase(); }
+    else {
+      handoverTitle.innerHTML = `¡Sigue la Muerte Súbita! R${state.sdRound+1}`;
+      handoverMsg.textContent = 'Jugador 1 patea primero.';
+      showHandover();
+    }
+  }
+}
+
+function advancePenalty(chosen) {
+  const sd    = state.mode === 'sudden-death';
+  const penN  = sd ? state.sdRound : state.penIdx;
+  const penLabel = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
+
+  if (gameMode === 'arcade') {
+    if (state.phase === 'p1-kick') {
+      state.p1Kicks.push(chosen);
+      const cpuSave = Math.floor(Math.random()*6);
+      state.p2Saves.push(cpuSave);
+      const p1Goal = chosen !== cpuSave;
+      if (p1Goal) state.goalsP1++;
+      const rivName = arcadeOpponent ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'CPU';
+      showPenResult({
+        label: penLabel,
+        kickerName: '🇦🇷 Argentina', saverName: rivName,
+        kickZone: chosen, saveZone: cpuSave, goal: p1Goal,
+        onDone: () => {
+          const cpuKick = Math.floor(Math.random()*6);
+          state.p2Kicks.push(cpuKick);
+          state.p2KickPending = cpuKick;
+          state.phase = 'p1-save';
+          showGame(); renderPhase();
+        }
+      });
+
+    } else if (state.phase === 'p1-save') {
+      state.p1Saves.push(chosen);
+      const cpuKick  = state.p2KickPending;
+      const p2Goal   = cpuKick !== chosen;
+      if (p2Goal) state.goalsP2++;
+      const rivName  = arcadeOpponent ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'CPU';
+      const argGoal  = state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
+      showPenResult({
+        label: penLabel,
+        kickerName: rivName, saverName: '🇦🇷 Argentina',
+        kickZone: cpuKick, saveZone: chosen, goal: p2Goal,
+        onDone: () => {
+          if (sd) {
+            endSuddenDeath(argGoal, p2Goal);
+          } else {
+            state.penIdx++;
+            if (state.penIdx >= 5) endNormalPenalties();
+            else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
+          }
+        }
+      });
+    }
+
+  } else if (gameMode === 'single') {
+    if (state.phase === 'p1-kick') {
+      state.p1Kicks.push(chosen);
+      state.phase = 'p2-save';
+      handoverTitle.innerHTML = sd
+        ? `🧤 J2 ${teamLabel('river')} — ataja — MS R${state.sdRound+1}`
+        : `🧤 J2 ${teamLabel('river')} — ataja — ${penLabel}`;
+      handoverMsg.textContent = 'Jugador 1 ya pateó. Pasale el dispositivo al Jugador 2.';
+      showHandover();
+
+    } else if (state.phase === 'p2-save') {
+      state.p2Saves.push(chosen);
+      const p1Kick = state.p1Kicks[state.p1Kicks.length-1];
+      const p1Goal = p1Kick !== chosen;
+      if (p1Goal) state.goalsP1++;
+      showPenResult({
+        label: penLabel,
+        kickerName: teamLabel('argentina',16), saverName: teamLabel('river',16),
+        kickZone: p1Kick, saveZone: chosen, goal: p1Goal,
+        onDone: () => { state.phase = 'p2-kick'; showGame(); renderPhase(); }
+      });
+
+    } else if (state.phase === 'p2-kick') {
+      state.p2Kicks.push(chosen);
+      state.phase = 'p1-save';
+      handoverTitle.innerHTML = sd
+        ? `🧤 J1 ${teamLabel('argentina')} — ataja — MS R${state.sdRound+1}`
+        : `🧤 J1 ${teamLabel('argentina')} — ataja — ${penLabel}`;
+      handoverMsg.textContent = 'Jugador 2 ya pateó. Pasale el dispositivo al Jugador 1.';
+      showHandover();
+
+    } else if (state.phase === 'p1-save') {
+      state.p1Saves.push(chosen);
+      const p2Kick  = state.p2Kicks[state.p2Kicks.length-1];
+      const p2Goal  = p2Kick !== chosen;
+      if (p2Goal) state.goalsP2++;
+      const argGoal = state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
+      showPenResult({
+        label: penLabel,
+        kickerName: teamLabel('river',16), saverName: teamLabel('argentina',16),
+        kickZone: p2Kick, saveZone: chosen, goal: p2Goal,
+        onDone: () => {
+          if (sd) {
+            endSuddenDeath(argGoal, p2Goal);
+          } else {
+            state.penIdx++;
+            if (state.penIdx >= 5) endNormalPenalties();
+            else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
+          }
+        }
+      });
+    }
+  }
+}
 
 // ─────────────────────────────────────────────
 // PHASE TRANSITIONS
