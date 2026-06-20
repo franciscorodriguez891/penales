@@ -322,12 +322,10 @@
 <div id="arcade-intro">
   <div class="wc-title">🏆 Mundial FIFA 2026</div>
   <div class="wc-sub">Jugás con 🇦🇷 Argentina</div>
-  <div class="group-card">
+  <div class="group-card" id="arcade-intro-group">
     <h3>Grupo A</h3>
     <div class="group-team-row"><span>🇦🇷 Argentina</span><span class="you-badge">VOS</span></div>
-    <div class="group-team-row">🇲🇦 Marruecos</div>
-    <div class="group-team-row">🇮🇶 Irak</div>
-    <div class="group-team-row">🇺🇦 Ucrania</div>
+    <!-- opponents filled dynamically -->
   </div>
   <div class="format-pill">Grupos → Ronda 32 → Octavos → Cuartos → Semi → ⭐ Final</div>
   <p style="font-size:0.78rem;opacity:0.6">Todos los partidos se definen por penales. La CPU elige al azar.</p>
@@ -868,7 +866,7 @@ function renderPhase() {
   switch(state.phase) {
     case 'p1-kick':
       phaseTitle.innerHTML = gameMode==='arcade'
-        ? `⚽ ${teamLabel('argentina')} — Elegí dónde patear${roundLabel}`
+        ? `⚽ 🇦🇷 Argentina — Elegí dónde patear${roundLabel}`
         : `⚽ Jugador 1 — ${teamLabel('argentina')} — Elige dónde patear${roundLabel}`;
       instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
       if(!sd) markConfirmed(state.p1Kicks);
@@ -876,7 +874,7 @@ function renderPhase() {
       break;
     case 'p1-save':
       phaseTitle.innerHTML = gameMode==='arcade'
-        ? `🧤 ${teamLabel('argentina')} — Elegí dónde atajar${roundLabel}`
+        ? `🧤 🇦🇷 Argentina — Elegí dónde atajar${roundLabel}`
         : `🧤 Jugador 1 — ${teamLabel('argentina')} — Elige dónde atajar${roundLabel}`;
       instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
       if(!sd) markConfirmed(state.p1Saves);
@@ -1015,6 +1013,10 @@ function evaluateNormal() {
   }
   state.goalsP1=g1; state.goalsP2=g2;
   if (g1===g2) {
+    // En R32 arcade no hay muerte súbita: empate = 1 punto, Argentina avanza
+    if (gameMode==='arcade' && arcadeState.stage==='knockout' && arcadeState.knockoutIndex===0) {
+      arcadeMatchDone(null); return;
+    }
     state.mode='sudden-death'; state.sdRound=0; state.phase='p1-kick';
     if (gameMode === 'single') {
       handoverTitle.textContent='¡Empate! — Muerte Súbita';
@@ -1136,11 +1138,14 @@ function buildAnimQueue() {
     const m2 = getMissType(state.p2Kicks[i], state.p1Saves[i]);
     state.p1Misses[i] = m1;
     state.p2Misses[i] = m2;
+    const p1AnimLabel = gameMode==='arcade'
+      ? `<span class="team-inline">🇦🇷 Argentina</span>`
+      : teamLabel('argentina', 20);
     const p2AnimLabel = (gameMode==='arcade' && arcadeOpponent)
       ? `<span class="team-inline">${arcadeOpponent.flag} ${arcadeOpponent.name}</span>`
       : teamLabel('river', 20);
-    q.push({label:`${pen} — ${teamLabel('argentina',20)} patea`, kickZone:state.p1Kicks[i], saveZone:state.p2Saves[i], kickerTeam:'argentina', goalieTeam:'river',      missType:m1});
-    q.push({label:`${pen} — ${p2AnimLabel} patea`,              kickZone:state.p2Kicks[i], saveZone:state.p1Saves[i], kickerTeam:'river',      goalieTeam:'argentina', missType:m2});
+    q.push({label:`${pen} — ${p1AnimLabel} patea`, kickZone:state.p1Kicks[i], saveZone:state.p2Saves[i], kickerTeam:'argentina', goalieTeam:'river',      missType:m1});
+    q.push({label:`${pen} — ${p2AnimLabel} patea`, kickZone:state.p2Kicks[i], saveZone:state.p1Saves[i], kickerTeam:'river',      goalieTeam:'argentina', missType:m2});
   }
   return q;
 }
@@ -1313,11 +1318,14 @@ function playOneAnim(item) {
 }
 
 function updateAnimScore(){
+  const p1Label = gameMode==='arcade'
+    ? `<span class="team-inline">🇦🇷 Argentina</span>`
+    : teamLabel('argentina', 22);
   const p2Label = (gameMode==='arcade' && arcadeOpponent)
     ? `<span class="team-inline">${arcadeOpponent.flag} ${arcadeOpponent.name}</span>`
     : teamLabel('river', 22);
   document.getElementById('anim-scoreboard').innerHTML =
-    `${teamLabel('argentina',22)} <strong>${animG1}</strong> &nbsp;—&nbsp; <strong>${animG2}</strong> ${p2Label}`;
+    `${p1Label} <strong>${animG1}</strong> &nbsp;—&nbsp; <strong>${animG2}</strong> ${p2Label}`;
 }
 
 // ─────────────────────────────────────────────
@@ -1946,56 +1954,67 @@ document.getElementById('lobby-back-btn').addEventListener('click', () => {
 // ARCADE — MUNDIAL FIFA 2026
 // ══════════════════════════════════════════════
 
-const WC2026 = {
-  group: {
-    name: 'Grupo A',
-    opponents: [
-      { name: 'Marruecos', flag: '🇲🇦' },
-      { name: 'Irak',      flag: '🇮🇶' },
-      { name: 'Ucrania',   flag: '🇺🇦' }
-    ]
-  },
-  knockout: [
-    { label: 'Ronda de 32',     pool: [{name:'Honduras',   flag:'🇭🇳'},{name:'Jamaica',     flag:'🇯🇲'},{name:'Panamá',    flag:'🇵🇦'},{name:'El Salvador',flag:'🇸🇻'}] },
-    { label: 'Octavos de Final', pool: [{name:'Polonia',    flag:'🇵🇱'},{name:'Serbia',      flag:'🇷🇸'},{name:'Turquía',   flag:'🇹🇷'},{name:'Escocia',    flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿'}] },
-    { label: 'Cuartos de Final', pool: [{name:'Alemania',   flag:'🇩🇪'},{name:'Francia',     flag:'🇫🇷'},{name:'P. Bajos', flag:'🇳🇱'},{name:'Portugal',   flag:'🇵🇹'}] },
-    { label: 'Semifinal',        pool: [{name:'Inglaterra', flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'},{name:'España',     flag:'🇪🇸'},{name:'Italia',    flag:'🇮🇹'},{name:'Croacia',    flag:'🇭🇷'}] },
-    { label: '⭐ GRAN FINAL ⭐', pool: [{name:'Brasil',     flag:'🇧🇷'},{name:'Colombia',    flag:'🇨🇴'},{name:'Francia',   flag:'🇫🇷'},{name:'Alemania',   flag:'🇩🇪'}] }
-  ]
-};
+// ── Pools de rivales ──
+const GROUP_POOL = [
+  {name:'Marruecos',    flag:'🇲🇦'}, {name:'Irak',         flag:'🇮🇶'},
+  {name:'Ucrania',      flag:'🇺🇦'}, {name:'Arabia Saudí', flag:'🇸🇦'},
+  {name:'Japón',        flag:'🇯🇵'}, {name:'Senegal',      flag:'🇸🇳'},
+  {name:'Nigeria',      flag:'🇳🇬'}, {name:'México',       flag:'🇲🇽'},
+  {name:'Turquía',      flag:'🇹🇷'}, {name:'Suiza',        flag:'🇨🇭'},
+  {name:'Ghana',        flag:'🇬🇭'}, {name:'Australia',    flag:'🇦🇺'},
+  {name:'Egipto',       flag:'🇪🇬'}, {name:'Serbia',       flag:'🇷🇸'},
+  {name:'Polonia',      flag:'🇵🇱'}, {name:'Croacia',      flag:'🇭🇷'}
+];
 
-let arcadeState    = null;
-let arcadeGroupTable = null;
-let arcadeOpponent = null; // {name, flag}
+const R32_POOL = [
+  {name:'Honduras',    flag:'🇭🇳'}, {name:'Jamaica',      flag:'🇯🇲'},
+  {name:'Panamá',      flag:'🇵🇦'}, {name:'El Salvador',  flag:'🇸🇻'},
+  {name:'Costa Rica',  flag:'🇨🇷'}, {name:'Canadá',       flag:'🇨🇦'},
+  {name:'Bolivia',     flag:'🇧🇴'}, {name:'Ecuador',      flag:'🇪🇨'},
+  {name:'Venezuela',   flag:'🇻🇪'}, {name:'Paraguay',     flag:'🇵🇾'}
+];
+
+// Ronda de 32: random · Octavos en adelante: rivales fijos
+const WC2026_KNOCKOUT = [
+  { label: 'Ronda de 32',      type:'random', pool: R32_POOL },
+  { label: 'Octavos de Final', type:'fixed',  opponent: {name:'Holanda',    flag:'🇳🇱'} },
+  { label: 'Cuartos de Final', type:'fixed',  opponent: {name:'Francia',    flag:'🇫🇷'} },
+  { label: 'Semifinal',        type:'fixed',  opponent: {name:'Brasil',     flag:'🇧🇷'} },
+  { label: '⭐ GRAN FINAL ⭐', type:'fixed',  opponent: {name:'Inglaterra', flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿'} }
+];
+
+let arcadeState       = null;
+let arcadeGroupTable  = null;
+let arcadeOpponent    = null; // {name, flag}
+let arcadeGroupOpps   = [];   // 3 rivals sorteados para el grupo
 
 function randInt(a, b) { return a + Math.floor(Math.random() * (b - a + 1)); }
 
-function initArcadeGroupTable() {
-  const [m, iq, u] = WC2026.group.opponents;
-  // Simulate the 3 matches not involving Argentina
-  const pairs = [[m, iq], [m, u], [iq, u]];
-  const pts = {}, gf = {}, ga = {};
-  [m, iq, u].forEach(t => { pts[t.name]=0; gf[t.name]=0; ga[t.name]=0; });
-  pairs.forEach(([a, b]) => {
-    const sa = randInt(1,5), sb = randInt(1,5);
-    const aWins = sa !== sb ? sa > sb : Math.random() < 0.5;
-    const fa = aWins ? Math.max(sa,sb) : Math.min(sa,sb);
-    const fb = aWins ? Math.min(sa,sb) : Math.max(sa,sb);
-    gf[a.name]+=fa; ga[a.name]+=fb; pts[a.name]+= aWins?3:0;
-    gf[b.name]+=fb; ga[b.name]+=fa; pts[b.name]+= aWins?0:3;
+function initArcadeGroupTable(opps) {
+  const [a, b, c] = opps;
+  const pairs = [[a,b],[a,c],[b,c]];
+  const pts={}, gf={}, ga={};
+  opps.forEach(t => { pts[t.name]=0; gf[t.name]=0; ga[t.name]=0; });
+  pairs.forEach(([x, y]) => {
+    const sx = randInt(1,5), sy = randInt(1,5);
+    const xWins = sx !== sy ? sx > sy : Math.random() < 0.5;
+    const fx = xWins ? Math.max(sx,sy) : Math.min(sx,sy);
+    const fy = xWins ? Math.min(sx,sy) : Math.max(sx,sy);
+    gf[x.name]+=fx; ga[x.name]+=fy; pts[x.name]+= xWins?3:0;
+    gf[y.name]+=fy; ga[y.name]+=fx; pts[y.name]+= xWins?0:3;
   });
   arcadeGroupTable = [
     { name:'Argentina', flag:'🇦🇷', pts:0, gf:0, ga:0, played:0, isArg:true },
-    { name:m.name,  flag:m.flag,  pts:pts[m.name],  gf:gf[m.name],  ga:ga[m.name],  played:2 },
-    { name:iq.name, flag:iq.flag, pts:pts[iq.name], gf:gf[iq.name], ga:ga[iq.name], played:2 },
-    { name:u.name,  flag:u.flag,  pts:pts[u.name],  gf:gf[u.name],  ga:ga[u.name],  played:2 }
+    { name:a.name, flag:a.flag, pts:pts[a.name], gf:gf[a.name], ga:ga[a.name], played:2 },
+    { name:b.name, flag:b.flag, pts:pts[b.name], gf:gf[b.name], ga:ga[b.name], played:2 },
+    { name:c.name, flag:c.flag, pts:pts[c.name], gf:gf[c.name], ga:ga[c.name], played:2 }
   ];
 }
 
 function sortedTable() {
   return [...arcadeGroupTable].sort((a,b) => {
     if (b.pts !== a.pts) return b.pts - a.pts;
-    return (b.gf-b.ga) - (a.gf-a.ga);
+    return (b.gf - b.ga) - (a.gf - a.ga); // desempate: diferencia de goles
   });
 }
 
@@ -2013,8 +2032,23 @@ function groupTableHTML() {
 function initArcade() {
   gameMode = 'arcade';
   arcadeState = { matchIndex: 0, knockoutIndex: 0, stage: 'group' };
-  arcadeOpponent = WC2026.group.opponents[0];
-  initArcadeGroupTable();
+
+  // Seleccionar 3 rivales aleatorios para el grupo
+  const shuffled = [...GROUP_POOL].sort(() => Math.random() - 0.5);
+  arcadeGroupOpps = shuffled.slice(0, 3);
+  arcadeOpponent  = arcadeGroupOpps[0];
+  initArcadeGroupTable(arcadeGroupOpps);
+
+  // Actualizar pantalla intro con rivales sorteados
+  const card = document.getElementById('arcade-intro-group');
+  card.querySelectorAll('.dyn-opp').forEach(el => el.remove());
+  arcadeGroupOpps.forEach(o => {
+    const row = document.createElement('div');
+    row.className = 'group-team-row dyn-opp';
+    row.textContent = `${o.flag} ${o.name}`;
+    card.appendChild(row);
+  });
+
   hideAll();
   arcadeIntroScreen.style.display = 'flex';
 }
@@ -2022,93 +2056,94 @@ function initArcade() {
 function startArcadeMatch() {
   state = initState();
   state.phase = 'p1-kick';
-  const banner = document.getElementById('arcade-banner');
-  banner.style.display = 'block';
-  if (arcadeState.stage === 'group') {
-    document.getElementById('arcade-stage-label').textContent =
-      `Grupo A — Fecha ${arcadeState.matchIndex + 1} de 3`;
-  } else {
-    document.getElementById('arcade-stage-label').textContent =
-      WC2026.knockout[arcadeState.knockoutIndex].label;
-  }
+  document.getElementById('arcade-banner').style.display = 'block';
+  document.getElementById('arcade-stage-label').textContent = arcadeState.stage === 'group'
+    ? `Grupo A — Fecha ${arcadeState.matchIndex + 1} de 3`
+    : WC2026_KNOCKOUT[arcadeState.knockoutIndex].label;
   document.getElementById('arcade-match-label').innerHTML =
     `🇦🇷 Argentina vs ${arcadeOpponent.flag} ${arcadeOpponent.name}`;
   showGame(); renderPhase();
 }
 
+// argWon: true=ganó · false=perdió · null=empate (solo R32)
 function arcadeMatchDone(argWon) {
   const prevOpponent = arcadeOpponent;
   const scoreStr = `${state.goalsP1} – ${state.goalsP2}`;
+  const isDraw   = argWon === null;
 
   if (arcadeState.stage === 'group') {
     const arg = arcadeGroupTable.find(t => t.isArg);
     arg.played++; arg.gf += state.goalsP1; arg.ga += state.goalsP2;
-    if (argWon) arg.pts += 3;
+    arg.pts += argWon ? 3 : 0; // en grupos siempre hay ganador (muerte súbita)
     arcadeState.matchIndex++;
 
     if (arcadeState.matchIndex < 3) {
-      arcadeOpponent = WC2026.group.opponents[arcadeState.matchIndex];
-      showArcadeBetween({ prevOpponent, won: argWon, scoreStr, type: 'group-mid' });
+      arcadeOpponent = arcadeGroupOpps[arcadeState.matchIndex];
+      showArcadeBetween({ prevOpponent, won: argWon, isDraw: false, scoreStr, type: 'group-mid' });
     } else {
-      // Group done — check qualification
       const sorted = sortedTable();
-      const pos = sorted.findIndex(t => t.isArg); // 0-based
+      const pos = sorted.findIndex(t => t.isArg);
       let qualified = pos <= 1;
       let qualMsg = '';
-      if (!qualified && pos === 2) { qualified = Math.random() < 0.78; }
-      if (pos === 0)      qualMsg = '🥇 ¡Argentina terminó 1ª del grupo!';
-      else if (pos === 1) qualMsg = '🥈 Argentina terminó 2ª del grupo.';
-      else if (qualified) qualMsg = '🏅 Argentina avanza como mejor 3er lugar.';
+      if (!qualified && pos === 2) qualified = Math.random() < 0.78;
+      if (pos === 0)       qualMsg = '🥇 ¡Argentina terminó 1ª del grupo!';
+      else if (pos === 1)  qualMsg = '🥈 Argentina terminó 2ª del grupo.';
+      else if (qualified)  qualMsg = '🏅 Argentina avanza como mejor 3er lugar.';
 
       if (qualified) {
         arcadeState.stage = 'knockout';
         arcadeState.knockoutIndex = 0;
         pickKnockoutOpponent();
-        showArcadeBetween({ prevOpponent, won: argWon, scoreStr, type: 'group-done', qualMsg });
+        showArcadeBetween({ prevOpponent, won: argWon, isDraw: false, scoreStr, type: 'group-done', qualMsg });
       } else {
         showArcadeEliminated(prevOpponent, scoreStr, 'Fase de Grupos');
       }
     }
   } else {
-    if (argWon) {
+    // Knockout: ganó o empató (R32) → avanzar; perdió → eliminado
+    if (isDraw || argWon) {
       arcadeState.knockoutIndex++;
-      if (arcadeState.knockoutIndex >= WC2026.knockout.length) {
+      if (arcadeState.knockoutIndex >= WC2026_KNOCKOUT.length) {
         showArcadeChampion();
       } else {
         pickKnockoutOpponent();
-        showArcadeBetween({ prevOpponent, won: true, scoreStr, type: 'knockout' });
+        showArcadeBetween({ prevOpponent, won: argWon, isDraw, scoreStr, type: 'knockout' });
       }
     } else {
-      const stage = WC2026.knockout[arcadeState.knockoutIndex].label;
-      showArcadeEliminated(prevOpponent, scoreStr, stage);
+      showArcadeEliminated(prevOpponent, scoreStr, WC2026_KNOCKOUT[arcadeState.knockoutIndex - 0].label);
     }
   }
 }
 
 function pickKnockoutOpponent() {
-  const pool = WC2026.knockout[arcadeState.knockoutIndex].pool;
-  arcadeOpponent = pool[Math.floor(Math.random() * pool.length)];
+  const ko = WC2026_KNOCKOUT[arcadeState.knockoutIndex];
+  arcadeOpponent = ko.type === 'fixed'
+    ? ko.opponent
+    : ko.pool[Math.floor(Math.random() * ko.pool.length)];
 }
 
-function showArcadeBetween({ prevOpponent, won, scoreStr, type, qualMsg }) {
+function showArcadeBetween({ prevOpponent, won, isDraw, scoreStr, type, qualMsg }) {
   hideAll();
   arcadeBetweenScreen.style.display = 'flex';
   document.getElementById('arcade-banner').style.display = 'none';
 
-  // Result
   const resEl = document.getElementById('arcade-between-result');
-  resEl.innerHTML = won
-    ? `<div class="result-win">✅ ¡GANÓ ARGENTINA!</div>
-       <div class="result-score">🇦🇷 Argentina ${scoreStr} ${prevOpponent.flag} ${prevOpponent.name}</div>`
-    : `<div class="result-lose">❌ Argentina perdió</div>
-       <div class="result-score">🇦🇷 Argentina ${scoreStr} ${prevOpponent.flag} ${prevOpponent.name}</div>`;
+  if (isDraw) {
+    resEl.innerHTML = `<div style="color:#ffd700;font-size:1.4rem;font-weight:900">🤝 EMPATE — Argentina avanza</div>
+      <div class="result-score">🇦🇷 Argentina ${scoreStr} ${prevOpponent.flag} ${prevOpponent.name}</div>
+      <div style="font-size:0.82rem;color:#d4f5d4;margin-top:4px">1 punto para cada equipo</div>`;
+  } else if (won) {
+    resEl.innerHTML = `<div class="result-win">✅ ¡GANÓ ARGENTINA!</div>
+      <div class="result-score">🇦🇷 Argentina ${scoreStr} ${prevOpponent.flag} ${prevOpponent.name}</div>`;
+  } else {
+    resEl.innerHTML = `<div class="result-lose">❌ Argentina perdió</div>
+      <div class="result-score">🇦🇷 Argentina ${scoreStr} ${prevOpponent.flag} ${prevOpponent.name}</div>`;
+  }
 
-  // Qualify message
   const advEl = document.getElementById('arcade-between-advance');
   if (qualMsg) { advEl.textContent = qualMsg; advEl.style.display = 'block'; }
   else         { advEl.style.display = 'none'; }
 
-  // Group table
   const tblWrap = document.getElementById('arcade-between-table');
   if (type === 'group-mid' || type === 'group-done') {
     document.getElementById('arcade-table-content').innerHTML = groupTableHTML();
@@ -2117,15 +2152,14 @@ function showArcadeBetween({ prevOpponent, won, scoreStr, type, qualMsg }) {
     tblWrap.style.display = 'none';
   }
 
-  // Next match card
   const nextEl = document.getElementById('arcade-between-next');
   const btnEl  = document.getElementById('arcade-between-btn');
   if (type === 'group-mid') {
-    const next = WC2026.group.opponents[arcadeState.matchIndex];
+    const next = arcadeGroupOpps[arcadeState.matchIndex];
     nextEl.innerHTML = `<strong>Próximo partido:</strong><br>🇦🇷 Argentina vs ${next.flag} ${next.name}`;
     nextEl.style.display = 'block'; btnEl.style.display = 'block';
   } else if (type === 'group-done' || type === 'knockout') {
-    const ko = WC2026.knockout[arcadeState.knockoutIndex];
+    const ko = WC2026_KNOCKOUT[arcadeState.knockoutIndex];
     nextEl.innerHTML = `<strong>${ko.label}</strong><br>🇦🇷 Argentina vs ${arcadeOpponent.flag} ${arcadeOpponent.name}`;
     nextEl.style.display = 'block'; btnEl.style.display = 'block';
   } else {
@@ -2138,7 +2172,7 @@ function showArcadeEliminated(opponent, scoreStr, stage) {
   document.getElementById('arcade-banner').style.display = 'none';
   arcadeElimScreen.style.display = 'flex';
   document.getElementById('elim-stage').textContent = stage ? `Eliminados en: ${stage}` : '';
-  document.getElementById('elim-msg').textContent = `Argentina perdió contra ${opponent.flag} ${opponent.name}`;
+  document.getElementById('elim-msg').textContent   = `Argentina perdió contra ${opponent.flag} ${opponent.name}`;
   document.getElementById('elim-score').textContent = `🇦🇷 Argentina ${scoreStr} ${opponent.flag} ${opponent.name}`;
 }
 
