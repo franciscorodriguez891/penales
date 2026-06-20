@@ -1060,37 +1060,17 @@ confirmBtn.addEventListener('click', () => {
 // ─────────────────────────────────────────────
 // UNO POR UNO — single y arcade
 // ─────────────────────────────────────────────
-const ZONE_NUM = [4, 1, 5, 2, 6, 3]; // pos → número visible en la zona
 
-function showPenResult({ label, kickerName, saverName, kickZone, saveZone, goal, onDone }) {
-  // Ocultar selector de zona
-  document.getElementById('goal-wrapper').style.display = 'none';
-  document.getElementById('instruction').style.display  = 'none';
-  confirmBtn.style.display = 'none';
-
-  const card = document.getElementById('pen-result-card');
-  document.getElementById('prc-label').textContent   = label;
-  document.getElementById('prc-verdict').textContent = goal ? '⚽ ¡GOOOOL!' : '🧤 ¡ATAJADO!';
-  document.getElementById('prc-verdict').className   = goal ? 'prc-goal' : 'prc-save';
-  document.getElementById('prc-zones').textContent   =
-    `${kickerName} → zona ${ZONE_NUM[kickZone]}  |  ${saverName} → zona ${ZONE_NUM[saveZone]}`;
-  const rivLabel = (gameMode==='arcade' && arcadeOpponent)
-    ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'Rival';
-  document.getElementById('prc-score').innerHTML =
-    `🇦🇷 Argentina <strong>${state.goalsP1}</strong> – <strong>${state.goalsP2}</strong> ${rivLabel}`;
-  card.style.display = 'flex';
-
-  const proceed = () => {
-    card.removeEventListener('click', proceed);
-    clearTimeout(tid);
-    card.style.display = 'none';
-    document.getElementById('goal-wrapper').style.display = '';
-    document.getElementById('instruction').style.display  = '';
-    confirmBtn.style.display = '';
+// Anima UN penal usando el sistema de animación existente, luego llama onDone
+function animOnePenalty(item, onDone) {
+  animG1 = state.goalsP1;
+  animG2 = state.goalsP2;
+  showAnim();
+  playOneAnim(item).then(() => {
+    state.goalsP1 = animG1;
+    state.goalsP2 = animG2;
     onDone();
-  };
-  card.addEventListener('click', proceed);
-  const tid = setTimeout(proceed, 2200);
+  });
 }
 
 function endNormalPenalties() {
@@ -1114,9 +1094,7 @@ function endNormalPenalties() {
 
 function endSuddenDeath(argGoalThisRound, rivGoalThisRound) {
   if (argGoalThisRound !== rivGoalThisRound) {
-    // Penal decisivo
-    if (argGoalThisRound) state.goalsP1++;
-    else                  state.goalsP2++;
+    // goalsP1/P2 ya están actualizados por animOnePenalty
     if (gameMode === 'arcade') arcadeMatchDone(argGoalThisRound);
     else showFinalResults();
   } else {
@@ -1133,50 +1111,56 @@ function endSuddenDeath(argGoalThisRound, rivGoalThisRound) {
 }
 
 function advancePenalty(chosen) {
-  const sd    = state.mode === 'sudden-death';
-  const penN  = sd ? state.sdRound : state.penIdx;
+  const sd       = state.mode === 'sudden-death';
   const penLabel = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
+  const p1Lbl    = gameMode==='arcade'
+    ? `<span class="team-inline">🇦🇷 Argentina</span>`
+    : teamLabel('argentina', 20);
+  const p2Lbl    = (gameMode==='arcade' && arcadeOpponent)
+    ? `<span class="team-inline">${arcadeOpponent.flag} ${arcadeOpponent.name}</span>`
+    : teamLabel('river', 20);
 
   if (gameMode === 'arcade') {
     if (state.phase === 'p1-kick') {
       state.p1Kicks.push(chosen);
-      const cpuSave = Math.floor(Math.random()*6);
+      const cpuSave  = Math.floor(Math.random()*6);
       state.p2Saves.push(cpuSave);
-      const p1Goal = chosen !== cpuSave;
-      if (p1Goal) state.goalsP1++;
-      const rivName = arcadeOpponent ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'CPU';
-      showPenResult({
-        label: penLabel,
-        kickerName: '🇦🇷 Argentina', saverName: rivName,
-        kickZone: chosen, saveZone: cpuSave, goal: p1Goal,
-        onDone: () => {
-          const cpuKick = Math.floor(Math.random()*6);
-          state.p2Kicks.push(cpuKick);
-          state.p2KickPending = cpuKick;
-          state.phase = 'p1-save';
-          showGame(); renderPhase();
-        }
+      const missType = getMissType(chosen, cpuSave);
+      state.p1Misses.push(missType);
+      const item = {
+        label: `${penLabel} — ${p1Lbl} patea`,
+        kickZone: chosen, saveZone: cpuSave,
+        kickerTeam: 'argentina', goalieTeam: 'river', missType
+      };
+      animOnePenalty(item, () => {
+        const cpuKick = Math.floor(Math.random()*6);
+        state.p2Kicks.push(cpuKick);
+        state.p2KickPending = cpuKick;
+        state.phase = 'p1-save';
+        showGame(); renderPhase();
       });
 
     } else if (state.phase === 'p1-save') {
       state.p1Saves.push(chosen);
       const cpuKick  = state.p2KickPending;
-      const p2Goal   = cpuKick !== chosen;
-      if (p2Goal) state.goalsP2++;
-      const rivName  = arcadeOpponent ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : 'CPU';
-      const argGoal  = state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
-      showPenResult({
-        label: penLabel,
-        kickerName: rivName, saverName: '🇦🇷 Argentina',
-        kickZone: cpuKick, saveZone: chosen, goal: p2Goal,
-        onDone: () => {
-          if (sd) {
-            endSuddenDeath(argGoal, p2Goal);
-          } else {
-            state.penIdx++;
-            if (state.penIdx >= 5) endNormalPenalties();
-            else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
-          }
+      const missType = getMissType(cpuKick, chosen);
+      state.p2Misses.push(missType);
+      // argGoal se lee ANTES de la animación (la animación actualiza animG1/animG2)
+      const argGoal = !state.p1Misses[state.p1Misses.length-1] &&
+                      state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
+      const item = {
+        label: `${penLabel} — ${p2Lbl} patea`,
+        kickZone: cpuKick, saveZone: chosen,
+        kickerTeam: 'river', goalieTeam: 'argentina', missType
+      };
+      animOnePenalty(item, () => {
+        const p2Goal = !missType && cpuKick !== chosen;
+        if (sd) {
+          endSuddenDeath(argGoal, p2Goal);
+        } else {
+          state.penIdx++;
+          if (state.penIdx >= 5) endNormalPenalties();
+          else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
         }
       });
     }
@@ -1186,50 +1170,54 @@ function advancePenalty(chosen) {
       state.p1Kicks.push(chosen);
       state.phase = 'p2-save';
       handoverTitle.innerHTML = sd
-        ? `🧤 J2 ${teamLabel('river')} — ataja — MS R${state.sdRound+1}`
-        : `🧤 J2 ${teamLabel('river')} — ataja — ${penLabel}`;
+        ? `🧤 J2 ${teamLabel('river')} — ataja (MS R${state.sdRound+1})`
+        : `🧤 J2 ${teamLabel('river')} — ataja (${penLabel})`;
       handoverMsg.textContent = 'Jugador 1 ya pateó. Pasale el dispositivo al Jugador 2.';
       showHandover();
 
     } else if (state.phase === 'p2-save') {
       state.p2Saves.push(chosen);
-      const p1Kick = state.p1Kicks[state.p1Kicks.length-1];
-      const p1Goal = p1Kick !== chosen;
-      if (p1Goal) state.goalsP1++;
-      showPenResult({
-        label: penLabel,
-        kickerName: teamLabel('argentina',16), saverName: teamLabel('river',16),
-        kickZone: p1Kick, saveZone: chosen, goal: p1Goal,
-        onDone: () => { state.phase = 'p2-kick'; showGame(); renderPhase(); }
+      const p1Kick   = state.p1Kicks[state.p1Kicks.length-1];
+      const missType = getMissType(p1Kick, chosen);
+      state.p1Misses.push(missType);
+      const item = {
+        label: `${penLabel} — ${p1Lbl} patea`,
+        kickZone: p1Kick, saveZone: chosen,
+        kickerTeam: 'argentina', goalieTeam: 'river', missType
+      };
+      animOnePenalty(item, () => {
+        state.phase = 'p2-kick'; showGame(); renderPhase();
       });
 
     } else if (state.phase === 'p2-kick') {
       state.p2Kicks.push(chosen);
       state.phase = 'p1-save';
       handoverTitle.innerHTML = sd
-        ? `🧤 J1 ${teamLabel('argentina')} — ataja — MS R${state.sdRound+1}`
-        : `🧤 J1 ${teamLabel('argentina')} — ataja — ${penLabel}`;
+        ? `🧤 J1 ${teamLabel('argentina')} — ataja (MS R${state.sdRound+1})`
+        : `🧤 J1 ${teamLabel('argentina')} — ataja (${penLabel})`;
       handoverMsg.textContent = 'Jugador 2 ya pateó. Pasale el dispositivo al Jugador 1.';
       showHandover();
 
     } else if (state.phase === 'p1-save') {
       state.p1Saves.push(chosen);
-      const p2Kick  = state.p2Kicks[state.p2Kicks.length-1];
-      const p2Goal  = p2Kick !== chosen;
-      if (p2Goal) state.goalsP2++;
-      const argGoal = state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
-      showPenResult({
-        label: penLabel,
-        kickerName: teamLabel('river',16), saverName: teamLabel('argentina',16),
-        kickZone: p2Kick, saveZone: chosen, goal: p2Goal,
-        onDone: () => {
-          if (sd) {
-            endSuddenDeath(argGoal, p2Goal);
-          } else {
-            state.penIdx++;
-            if (state.penIdx >= 5) endNormalPenalties();
-            else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
-          }
+      const p2Kick   = state.p2Kicks[state.p2Kicks.length-1];
+      const missType = getMissType(p2Kick, chosen);
+      state.p2Misses.push(missType);
+      const argGoal  = !state.p1Misses[state.p1Misses.length-1] &&
+                       state.p1Kicks[state.p1Kicks.length-1] !== state.p2Saves[state.p2Saves.length-1];
+      const item = {
+        label: `${penLabel} — ${p2Lbl} patea`,
+        kickZone: p2Kick, saveZone: chosen,
+        kickerTeam: 'river', goalieTeam: 'argentina', missType
+      };
+      animOnePenalty(item, () => {
+        const p2Goal = !missType && p2Kick !== chosen;
+        if (sd) {
+          endSuddenDeath(argGoal, p2Goal);
+        } else {
+          state.penIdx++;
+          if (state.penIdx >= 5) endNormalPenalties();
+          else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
         }
       });
     }
