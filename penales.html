@@ -8,6 +8,7 @@
 <meta name="apple-mobile-web-app-title" content="Penales">
 <title>Tanda de Penales</title>
 <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/twemoji@14.0.2/dist/twemoji.min.js" crossorigin="anonymous"></script>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -2309,6 +2310,24 @@ document.getElementById('champ-name-input').addEventListener('keydown', e => {
 // ── HOF button listeners ──
 document.getElementById('mode-hof-btn').addEventListener('click', showHOF);
 document.getElementById('hof-back-btn').addEventListener('click', () => { showModeSelect(); });
+
+// ─────────────────────────────────────────────
+// TWEMOJI — renderiza banderas en todos los dispositivos
+// ─────────────────────────────────────────────
+(function setupTwemoji() {
+  if (!window.twemoji) return;
+  const opts = { folder: 'svg', ext: '.svg' };
+  // Parsear contenido inicial
+  twemoji.parse(document.body, opts);
+  // Auto-parsear cualquier nodo nuevo que se agregue al DOM
+  new MutationObserver(mutations => {
+    mutations.forEach(m => {
+      m.addedNodes.forEach(node => {
+        if (node.nodeType === 1) twemoji.parse(node, opts);
+      });
+    });
+  }).observe(document.body, { childList: true, subtree: true });
+})();
 
 // ─────────────────────────────────────────────
 // INIT
