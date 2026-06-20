@@ -2101,7 +2101,7 @@ function initArcade() {
   arcadeGroupOpps.forEach(o => {
     const row = document.createElement('div');
     row.className = 'group-team-row dyn-opp';
-    row.textContent = `${o.flag} ${o.name}`;
+    row.innerHTML = `<span>${o.flag} ${o.name}</span><span class="you-badge" style="background:rgba(255,255,255,0.18);color:#fff">CPU</span>`;
     card.appendChild(row);
   });
 
