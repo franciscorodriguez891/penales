@@ -279,6 +279,42 @@
   @keyframes pulse { from { transform: scale(1); } to { transform: scale(1.08); } }
   .elim-emoji { font-size: 3rem; filter: grayscale(0.6); }
   .advance-msg { color: #ffd700; font-weight: bold; font-size: 0.95rem; }
+
+  /* ── HALL OF FAME ──────────────────────────── */
+  #hof-screen {
+    display: none; flex-direction: column; align-items: center;
+    gap: 14px; width: 100%; max-width: 420px; text-align: center;
+  }
+  .hof-title { color: #ffd700; font-size: 1.25rem; font-weight: 900; }
+  .hof-sub   { font-size: 0.78rem; opacity: 0.6; }
+  #hof-list  { width: 100%; display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
+  .hof-entry {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; border-radius: 10px;
+    background: rgba(0,0,0,0.3); border: 1px solid rgba(255,215,0,0.2);
+    text-align: left;
+  }
+  .hof-medal { font-size: 1.3rem; min-width: 28px; text-align: center; }
+  .hof-name  { flex: 1; font-weight: bold; font-size: 0.95rem; }
+  .hof-date  { font-size: 0.75rem; color: rgba(255,255,255,0.5); white-space: nowrap; }
+  .hof-empty { opacity: 0.55; font-style: italic; padding: 20px 0; font-size: 0.9rem; }
+  .mode-btn-hof {
+    background: linear-gradient(135deg, #7a5c00, #c89a00);
+    border: 2px solid rgba(255,215,0,0.6);
+  }
+  .mode-btn-hof:hover { background: linear-gradient(135deg, #9a7500, #e0b000); }
+  /* Champion name registration */
+  #champ-register-wrap {
+    width: 100%; background: rgba(0,0,0,0.35); border-radius: 14px;
+    padding: 14px 16px; display: flex; flex-direction: column; gap: 10px;
+  }
+  #champ-name-input {
+    width: 100%; padding: 11px 14px; border-radius: 10px;
+    border: 2px solid rgba(255,215,0,0.5); background: rgba(0,0,0,0.4);
+    color: #fff; font-size: 1rem; text-align: center; outline: none;
+  }
+  #champ-name-input:focus { border-color: #ffd700; }
+  #champ-registered-msg { color: #4caf50; font-weight: bold; }
 </style>
 </head>
 <body>
@@ -290,6 +326,7 @@
   <button class="mode-btn mode-btn-single" id="mode-single-btn">📱 Un dispositivo<br><small style="font-weight:normal;font-size:0.8rem">Se pasan el teléfono</small></button>
   <button class="mode-btn mode-btn-multi"  id="mode-multi-btn">📱📱 Dos dispositivos<br><small style="font-weight:normal;font-size:0.8rem">Cada uno en su celular</small></button>
   <button class="mode-btn mode-btn-arcade" id="mode-arcade-btn">🏆 Arcade — Mundial 2026<br><small style="font-weight:normal;font-size:0.8rem">1 jugador vs CPU · Siempre Argentina</small></button>
+  <button class="mode-btn mode-btn-hof"   id="mode-hof-btn">🥇 Los que saben cuanto Pesa<br><small style="font-weight:normal;font-size:0.8rem">Registro de Campeones del Mundo</small></button>
 </div>
 
 <!-- ══ LOBBY (2-device) ══ -->
@@ -362,9 +399,25 @@
   <div class="champion-glow">🏆</div>
   <div class="wc-title">¡CAMPEÓN DEL MUNDO!</div>
   <div class="wc-sub">🇦🇷 Argentina ganó la Copa del Mundo 2026</div>
-  <div style="font-size:2.2rem;margin:8px 0">🎊 🥇 🎊</div>
+  <div style="font-size:2.2rem;margin:4px 0">🎊 🥇 🎊</div>
+  <div id="champ-register-wrap">
+    <div style="color:#ffd700;font-weight:bold;font-size:0.95rem">¡Ingresá tu nombre para quedar en el registro!</div>
+    <input type="text" id="champ-name-input" placeholder="Tu nombre..." maxlength="30" autocomplete="off"/>
+    <button class="btn btn-primary" id="champ-register-btn">🏅 Registrar</button>
+    <div id="champ-registered-msg" style="display:none">✅ ¡Tu nombre quedó registrado!</div>
+  </div>
   <button class="btn btn-primary"   id="arcade-champ-again-btn">🔄 Jugar de nuevo</button>
+  <button class="btn btn-secondary" id="arcade-champ-hof-btn">🥇 Ver el Registro</button>
   <button class="btn btn-secondary" id="arcade-champ-menu-btn">🏠 Menú principal</button>
+</div>
+
+<!-- ══ HALL OF FAME ══ -->
+<div id="hof-screen">
+  <div style="font-size:2.8rem">🏆</div>
+  <div class="hof-title">Los que saben cuanto Pesa</div>
+  <div class="hof-sub">Campeones del Modo Arcade — Mundial FIFA 2026</div>
+  <div id="hof-list"></div>
+  <button class="btn btn-secondary" id="hof-back-btn">← Volver al menú</button>
 </div>
 
 <!-- ══ WAIT ══ -->
@@ -795,10 +848,11 @@ const arcadeIntroScreen   = document.getElementById('arcade-intro');
 const arcadeBetweenScreen = document.getElementById('arcade-between');
 const arcadeElimScreen    = document.getElementById('arcade-eliminated');
 const arcadeChampScreen   = document.getElementById('arcade-champion');
+const hofScreen           = document.getElementById('hof-screen');
 
 function hideAll() {
   [modeScreen, lobbyScreen, waitScreen, gameArea, handoverScreen, animScreen, resultsScreen,
-   arcadeIntroScreen, arcadeBetweenScreen, arcadeElimScreen, arcadeChampScreen]
+   arcadeIntroScreen, arcadeBetweenScreen, arcadeElimScreen, arcadeChampScreen, hofScreen]
     .forEach(s => s.style.display = 'none');
 }
 function showModeSelect() { hideAll(); modeScreen.style.display  = 'flex'; }
@@ -2179,7 +2233,53 @@ function showArcadeEliminated(opponent, scoreStr, stage) {
 function showArcadeChampion() {
   hideAll();
   document.getElementById('arcade-banner').style.display = 'none';
+  // Reset registration form
+  document.getElementById('champ-name-input').value = '';
+  document.getElementById('champ-register-wrap').style.display = 'flex';
+  document.getElementById('champ-registered-msg').style.display = 'none';
+  document.getElementById('champ-register-btn').disabled = false;
   arcadeChampScreen.style.display = 'flex';
+}
+
+// ══════════════════════════════════════════════
+// HALL OF FAME
+// ══════════════════════════════════════════════
+function getHOF() {
+  try { return JSON.parse(localStorage.getItem('penales_hof') || '[]'); }
+  catch(e) { return []; }
+}
+
+function addToHOF(name) {
+  const hof = getHOF();
+  const now  = new Date();
+  const date = now.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
+  hof.push({ name: name.trim(), date });
+  localStorage.setItem('penales_hof', JSON.stringify(hof));
+}
+
+function renderHOF() {
+  const hof = getHOF();
+  const listEl = document.getElementById('hof-list');
+  if (hof.length === 0) {
+    listEl.innerHTML = '<div class="hof-empty">Nadie ha ganado todavía.<br>¿Serás el primero?</div>';
+    return;
+  }
+  const medals = ['🥇','🥈','🥉'];
+  // Show newest first
+  listEl.innerHTML = [...hof].reverse().map((e, i) => {
+    const medal = i < 3 ? medals[i] : `${i+1}.`;
+    return `<div class="hof-entry">
+      <span class="hof-medal">${medal}</span>
+      <span class="hof-name">🇦🇷 ${e.name}</span>
+      <span class="hof-date">${e.date}</span>
+    </div>`;
+  }).join('');
+}
+
+function showHOF() {
+  hideAll();
+  renderHOF();
+  hofScreen.style.display = 'flex';
 }
 
 // ── Arcade button listeners ──
@@ -2191,7 +2291,24 @@ document.getElementById('arcade-between-back-btn').addEventListener('click', () 
 document.getElementById('arcade-elim-again-btn').addEventListener('click', initArcade);
 document.getElementById('arcade-elim-menu-btn').addEventListener('click', () => { gameMode='single'; showModeSelect(); });
 document.getElementById('arcade-champ-again-btn').addEventListener('click', initArcade);
+document.getElementById('arcade-champ-hof-btn').addEventListener('click', showHOF);
 document.getElementById('arcade-champ-menu-btn').addEventListener('click', () => { gameMode='single'; showModeSelect(); });
+
+document.getElementById('champ-register-btn').addEventListener('click', () => {
+  const name = document.getElementById('champ-name-input').value.trim();
+  if (!name) { document.getElementById('champ-name-input').focus(); return; }
+  addToHOF(name);
+  document.getElementById('champ-register-wrap').style.display = 'none';
+  document.getElementById('champ-registered-msg').style.display = 'block';
+});
+
+document.getElementById('champ-name-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('champ-register-btn').click();
+});
+
+// ── HOF button listeners ──
+document.getElementById('mode-hof-btn').addEventListener('click', showHOF);
+document.getElementById('hof-back-btn').addEventListener('click', () => { showModeSelect(); });
 
 // ─────────────────────────────────────────────
 // INIT
