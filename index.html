@@ -984,9 +984,14 @@ function advancePhase() {
     if (state.phase === 'p1-kick') {
       state.phase = 'p1-save'; renderPhase();
     } else if (state.phase === 'p1-save') {
-      const count = sd ? 1 : 5;
-      state.p2Kicks = Array.from({length:count}, () => Math.floor(Math.random()*6));
-      state.p2Saves = Array.from({length:count}, () => Math.floor(Math.random()*6));
+      if (sd) {
+        // Sudden death: push one more to existing arrays (matching how P1 pushes via confirmBtn)
+        state.p2Kicks.push(Math.floor(Math.random()*6));
+        state.p2Saves.push(Math.floor(Math.random()*6));
+      } else {
+        state.p2Kicks = Array.from({length:5}, () => Math.floor(Math.random()*6));
+        state.p2Saves = Array.from({length:5}, () => Math.floor(Math.random()*6));
+      }
       const queue = buildAnimQueue();
       playAnimQueue(queue, () => state.mode==='normal' ? evaluateNormal() : evaluateSuddenDeath());
     }
