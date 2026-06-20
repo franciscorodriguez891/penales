@@ -2313,7 +2313,7 @@ function initGuest(code) {
     mpConn.on('open', () => {
       statusEl.textContent = '✓ Conectado. Esperando que Argentina elija...';
       state = initState();
-      setTimeout(() => showWait('Esperando que Argentina elija...', 'Cuando terminen te avisamos.'), 800);
+      setTimeout(() => showWait('Penal 1 de 5: esperando que Argentina elija dónde patear…', ''), 800);
     });
     mpConn.on('data',  onMpMessage);
     mpConn.on('close', () => mpError('El rival se desconectó.'));
