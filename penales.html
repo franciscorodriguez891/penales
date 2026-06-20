@@ -2495,6 +2495,11 @@ function arcadeMatchDone(argWon) {
     const arg = arcadeGroupTable.find(t => t.isArg);
     arg.played++; arg.gf += state.goalsP1; arg.ga += state.goalsP2;
     arg.pts += argWon === true ? 3 : isDraw ? 1 : 0;
+
+    const opp = arcadeGroupTable.find(t => t.name === arcadeOpponent.name);
+    opp.played++; opp.gf += state.goalsP2; opp.ga += state.goalsP1;
+    opp.pts += argWon === false ? 3 : isDraw ? 1 : 0;
+
     arcadeState.matchIndex++;
 
     if (arcadeState.matchIndex < 3) {
