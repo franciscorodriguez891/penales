@@ -1069,8 +1069,9 @@ function evaluateNormal() {
   }
   state.goalsP1=g1; state.goalsP2=g2;
   if (g1===g2) {
-    // En R32 arcade no hay muerte súbita: empate = 1 punto, Argentina avanza
-    if (gameMode==='arcade' && arcadeState.stage==='knockout' && arcadeState.knockoutIndex===0) {
+    // En arcade, grupos y R32 pueden empatar (sin muerte súbita)
+    // Octavos en adelante siempre hay ganador
+    if (gameMode==='arcade' && (arcadeState.stage==='group' || arcadeState.knockoutIndex===0)) {
       arcadeMatchDone(null); return;
     }
     state.mode='sudden-death'; state.sdRound=0; state.phase='p1-kick';
@@ -2130,7 +2131,7 @@ function arcadeMatchDone(argWon) {
   if (arcadeState.stage === 'group') {
     const arg = arcadeGroupTable.find(t => t.isArg);
     arg.played++; arg.gf += state.goalsP1; arg.ga += state.goalsP2;
-    arg.pts += argWon ? 3 : 0; // en grupos siempre hay ganador (muerte súbita)
+    arg.pts += argWon === true ? 3 : argWon === null ? 1 : 0; // W=3, D=1, L=0
     arcadeState.matchIndex++;
 
     if (arcadeState.matchIndex < 3) {
