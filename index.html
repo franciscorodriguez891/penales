@@ -380,7 +380,7 @@
     <div class="group-team-row"><span>🇦🇷 Argentina</span><span class="you-badge">VOS</span></div>
     <!-- opponents filled dynamically -->
   </div>
-  <div class="format-pill">Grupos → Ronda 32 → Octavos → Cuartos → Semi → ⭐ Final</div>
+  <div class="format-pill">Grupos → Octavos → Cuartos → Semi → ⭐ Final</div>
   <p style="font-size:0.78rem;opacity:0.6">Todos los partidos se definen por penales. La CPU elige al azar.</p>
   <button class="btn btn-primary" id="arcade-intro-start-btn">⚽ ¡Empezar!</button>
   <button class="btn btn-secondary" id="arcade-intro-back-btn">← Volver</button>
@@ -391,7 +391,7 @@
   <div class="result-card" id="arcade-between-result"></div>
   <div class="advance-msg" id="arcade-between-advance" style="display:none"></div>
   <div class="group-table-wrap" id="arcade-between-table" style="display:none">
-    <h4>📊 Tabla — Grupo A</h4>
+    <h4 id="arcade-table-title">📊 Tabla — Grupo A</h4>
     <div id="arcade-table-content"></div>
   </div>
   <div class="next-card" id="arcade-between-next" style="display:none"></div>
@@ -834,7 +834,9 @@ function initState() {
     mode: 'normal',
     sdRound: 0,
     penIdx: 0,          // one-by-one: which penalty we're on (0-4)
-    p2KickPending: null,// one-by-one arcade: CPU kick stored before player saves
+    p2KickPending: null,// one-by-one arcade/mp: CPU/guest kick stored before host saves
+    pendingP1Kick: null,// mp host: host kick stored while waiting for guest save
+    sdArgGoal: false,   // mp SD: did Argentina score in this SD round
     p1Kicks:[], p1Saves:[],
     p2Kicks:[], p2Saves:[],
     p1Misses:[], p2Misses:[],
@@ -940,65 +942,32 @@ function renderPhase() {
   resetZones();
   const sd = state.mode === 'sudden-death';
 
-  if (gameMode === 'single' || gameMode === 'arcade') {
-    // ── Modo uno-por-uno ──
-    const penLabel = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
-    rebuildDots(sd ? state.sdRound+1 : 5, sd ? 0 : state.penIdx);
-    const rivalLabel = (gameMode==='arcade' && arcadeOpponent)
-      ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : teamLabel('river',16);
-    const scoreStr = `🇦🇷 ${state.goalsP1} – ${state.goalsP2} ${rivalLabel}`;
-    switch(state.phase) {
-      case 'p1-kick':
-        phaseTitle.innerHTML = gameMode==='arcade'
-          ? `⚽ Argentina patea — <small>${penLabel}</small>`
-          : `⚽ J1 ${teamLabel('argentina',16)} patea — <small>${penLabel}</small>`;
-        instruction.textContent = scoreStr;
-        break;
-      case 'p1-save':
-        phaseTitle.innerHTML = gameMode==='arcade'
-          ? `🧤 Argentina ataja — <small>${penLabel}</small>`
-          : `🧤 J1 ${teamLabel('argentina',16)} ataja — <small>${penLabel}</small>`;
-        instruction.textContent = scoreStr;
-        break;
-      case 'p2-kick':
-        phaseTitle.innerHTML = `⚽ J2 ${teamLabel('river',16)} patea — <small>${penLabel}</small>`;
-        instruction.textContent = scoreStr;
-        break;
-      case 'p2-save':
-        phaseTitle.innerHTML = `🧤 J2 ${teamLabel('river',16)} ataja — <small>${penLabel}</small>`;
-        instruction.textContent = scoreStr;
-        break;
-    }
-    return;
-  }
-
-  // ── Multijugador: 5 penales a la vez ──
-  const roundLabel = sd ? ` — Muerte Súbita R${state.sdRound+1}` : '';
-  const total = sd ? 1 : 5;
+  // ── Modo uno-por-uno (todos los modos) ──
+  const penLabel = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
+  rebuildDots(sd ? state.sdRound+1 : 5, sd ? 0 : state.penIdx);
+  const rivalLabel = (gameMode==='arcade' && arcadeOpponent)
+    ? `${arcadeOpponent.flag} ${arcadeOpponent.name}` : teamLabel('river',16);
+  const scoreStr = `🇦🇷 ${state.goalsP1} – ${state.goalsP2} ${rivalLabel}`;
   switch(state.phase) {
     case 'p1-kick':
-      phaseTitle.innerHTML = `⚽ Jugador 1 — ${teamLabel('argentina')} — Elige dónde patear${roundLabel}`;
-      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
-      if(!sd) markConfirmed(state.p1Kicks);
-      rebuildDots(total, state.currentIdx);
+      phaseTitle.innerHTML = gameMode==='arcade'
+        ? `⚽ Argentina patea — <small>${penLabel}</small>`
+        : `⚽ J1 ${teamLabel('argentina',16)} patea — <small>${penLabel}</small>`;
+      instruction.textContent = scoreStr;
       break;
     case 'p1-save':
-      phaseTitle.innerHTML = `🧤 Jugador 1 — ${teamLabel('argentina')} — Elige dónde atajar${roundLabel}`;
-      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
-      if(!sd) markConfirmed(state.p1Saves);
-      rebuildDots(total, state.currentIdx);
+      phaseTitle.innerHTML = gameMode==='arcade'
+        ? `🧤 Argentina ataja — <small>${penLabel}</small>`
+        : `🧤 J1 ${teamLabel('argentina',16)} ataja — <small>${penLabel}</small>`;
+      instruction.textContent = scoreStr;
       break;
     case 'p2-kick':
-      phaseTitle.innerHTML = `⚽ Jugador 2 — ${teamLabel('river')} — Elige dónde patear${roundLabel}`;
-      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Penal ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
-      if(!sd) markConfirmed(state.p2Kicks);
-      rebuildDots(total, state.currentIdx);
+      phaseTitle.innerHTML = `⚽ J2 ${teamLabel('river',16)} patea — <small>${penLabel}</small>`;
+      instruction.textContent = scoreStr;
       break;
     case 'p2-save':
-      phaseTitle.innerHTML = `🧤 Jugador 2 — ${teamLabel('river')} — Elige dónde atajar${roundLabel}`;
-      instruction.textContent = sd ? 'Presioná 1-6 para elegir zona.' : `Atajada ${state.currentIdx+1} de 5 — Presioná 1-6 para elegir.`;
-      if(!sd) markConfirmed(state.p2Saves);
-      rebuildDots(total, state.currentIdx);
+      phaseTitle.innerHTML = `🧤 J2 ${teamLabel('river',16)} ataja — <small>${penLabel}</small>`;
+      instruction.textContent = scoreStr;
       break;
   }
 }
@@ -1018,8 +987,8 @@ const isTouchDevice = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
 zones.forEach(z => {
   z.addEventListener('click', () => {
     selectZone(parseInt(z.dataset.pos));
-    // En dispositivos táctiles (single/arcade) la zona seleccionada se confirma sola
-    if (isTouchDevice && (gameMode === 'single' || gameMode === 'arcade')) {
+    // En dispositivos táctiles la zona seleccionada se confirma sola
+    if (isTouchDevice) {
       confirmBtn.click();
     }
   });
@@ -1041,20 +1010,8 @@ confirmBtn.addEventListener('click', () => {
   if (state.pendingChoice === null) return;
   const chosen = state.pendingChoice;
 
-  if (gameMode === 'single' || gameMode === 'arcade') {
-    advancePenalty(chosen);
-    return;
-  }
-
-  // ── Multijugador: acumular 5 elecciones ──
-  if     (state.phase==='p1-kick') state.p1Kicks.push(chosen);
-  else if(state.phase==='p1-save') state.p1Saves.push(chosen);
-  else if(state.phase==='p2-kick') state.p2Kicks.push(chosen);
-  else if(state.phase==='p2-save') state.p2Saves.push(chosen);
-  state.currentIdx++;
-  const limit = state.mode==='sudden-death' ? 1 : 5;
-  if (state.currentIdx >= limit) { state.currentIdx=0; advancePhase(); }
-  else renderPhase();
+  // Todos los modos usan uno-por-uno
+  advancePenalty(chosen);
 });
 
 // ─────────────────────────────────────────────
@@ -1076,7 +1033,7 @@ function animOnePenalty(item, onDone) {
 function endNormalPenalties() {
   const g1 = state.goalsP1, g2 = state.goalsP2;
   if (g1 === g2) {
-    if (gameMode==='arcade' && (arcadeState.stage==='group' || arcadeState.stage==='r32')) {
+    if (gameMode==='arcade' && arcadeState.stage==='group') {
       arcadeMatchDone(null); return;
     }
     state.mode = 'sudden-death'; state.sdRound = 0; state.penIdx = 0; state.phase = 'p1-kick';
@@ -1221,6 +1178,91 @@ function advancePenalty(chosen) {
         }
       });
     }
+
+  } else if (gameMode === 'host') {
+    if (state.phase === 'p1-kick') {
+      // Host patea → notifica al guest para que elija atajada
+      state.p1Kicks.push(chosen);
+      state.pendingP1Kick = chosen;
+      mpSend({ type: 'mp-p1-kicked', penIdx: state.penIdx, sd, sdRound: state.sdRound });
+      showWait(penLabel + ': esperando que River Plate elija dónde atajar…', '');
+
+    } else if (state.phase === 'p1-save') {
+      // Host ataja → tiene el kick del guest (pendingP2Kick) y su atajada → anima
+      state.p1Saves.push(chosen);
+      const p2Kick   = state.p2KickPending;
+      const missType = getMissType(p2Kick, chosen);
+      state.p2Misses.push(missType);
+      const rivGoalNow = !missType && p2Kick !== chosen;
+      const item = {
+        label: `${penLabel} — ${p2Lbl} patea`,
+        kickZone: p2Kick, saveZone: chosen,
+        kickerTeam: 'river', goalieTeam: 'argentina', missType
+      };
+      mpSend({ type: 'mp-anim', item });
+      animOnePenalty(item, () => {
+        if (sd) {
+          endSuddenDeathMp(state.sdArgGoal, rivGoalNow);
+        } else {
+          state.penIdx++;
+          if (state.penIdx >= 5) endNormalPenaltiesMp();
+          else { state.phase = 'p1-kick'; showGame(); renderPhase(); }
+        }
+      });
+    }
+
+  } else if (gameMode === 'guest') {
+    if (state.phase === 'p2-save') {
+      // Guest ataja el penal de Argentina → envía zona al host
+      state.p2Saves.push(chosen);
+      mpSend({ type: 'mp-p2-saved', saveZone: chosen });
+      showWait(penLabel + ': esperando la animación…', '');
+
+    } else if (state.phase === 'p2-kick') {
+      // Guest patea → envía zona al host para que ataje
+      state.p2Kicks.push(chosen);
+      mpSend({ type: 'mp-p2-kicked', kickZone: chosen });
+      showWait(penLabel + ': esperando que Argentina elija dónde atajar…', '');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+// MULTIJUGADOR UNO-POR-UNO — fin de serie
+// ─────────────────────────────────────────────
+function endNormalPenaltiesMp() {
+  const g1 = state.goalsP1, g2 = state.goalsP2;
+  if (g1 === g2) {
+    state.mode = 'sudden-death'; state.sdRound = 0; state.penIdx = 0; state.phase = 'p1-kick';
+    mpSend({ type: 'mp-sd-start', sdRound: 0, goalsP1: g1, goalsP2: g2 });
+    showGame(); renderPhase();
+  } else {
+    mpSend({
+      type: 'mp-game-over',
+      p1Kicks: state.p1Kicks, p1Saves: state.p1Saves,
+      p2Kicks: state.p2Kicks, p2Saves: state.p2Saves,
+      p1Misses: state.p1Misses, p2Misses: state.p2Misses,
+      goalsP1: g1, goalsP2: g2
+    });
+    showFinalResults();
+  }
+}
+
+function endSuddenDeathMp(argGoal, rivGoal) {
+  if (argGoal !== rivGoal) {
+    mpSend({
+      type: 'mp-game-over',
+      p1Kicks: state.p1Kicks, p1Saves: state.p1Saves,
+      p2Kicks: state.p2Kicks, p2Saves: state.p2Saves,
+      p1Misses: state.p1Misses, p2Misses: state.p2Misses,
+      goalsP1: state.goalsP1, goalsP2: state.goalsP2
+    });
+    showFinalResults();
+  } else {
+    state.sdRound++;
+    state.penIdx = 0; state.phase = 'p1-kick';
+    mpSend({ type: 'mp-sd-start', sdRound: state.sdRound, goalsP1: state.goalsP1, goalsP2: state.goalsP2 });
+    showGame(); renderPhase();
   }
 }
 
@@ -1305,7 +1347,7 @@ function evaluateNormal() {
   if (g1===g2) {
     // En arcade, grupos y R32 pueden empatar (sin muerte súbita)
     // Octavos en adelante siempre hay ganador
-    if (gameMode==='arcade' && (arcadeState.stage==='group' || arcadeState.stage==='r32')) {
+    if (gameMode==='arcade' && arcadeState.stage==='group') {
       arcadeMatchDone(null); return;
     }
     state.mode='sudden-death'; state.sdRound=0; state.phase='p1-kick';
@@ -1402,7 +1444,18 @@ function penaltyRow(label, kickPos, savePos, goal, miss) {
   </div>`;
 }
 
-restartBtn.addEventListener('click',()=>{ mpDestroy(); state=initState(); gameMode='single'; showModeSelect(); });
+restartBtn.addEventListener('click', () => {
+  if (gameMode === 'host' || gameMode === 'guest') {
+    mpIWantRematch = true;
+    mpSend({ type: 'mp-want-rematch' });
+    restartBtn.disabled = true;
+    restartBtn.textContent = 'Esperando al rival… (15s)';
+    startRematchTimeout();
+    tryMpRematch();
+    return;
+  }
+  mpDestroy(); state = initState(); gameMode = 'single'; showModeSelect();
+});
 
 // ─────────────────────────────────────────────
 // ANIMATION SYSTEM
@@ -2087,69 +2140,136 @@ function mpDestroy() {
   if (mpPeer)  { mpPeer.destroy(); mpPeer = null; }
 }
 
+// ── Rematch ──
+let mpIWantRematch    = false;
+let mpTheyWantRematch = false;
+let mpRematchTimer    = null;
+
+function clearRematchState() {
+  mpIWantRematch = false; mpTheyWantRematch = false;
+  clearTimeout(mpRematchTimer); mpRematchTimer = null;
+  restartBtn.textContent = 'Jugar de nuevo';
+  restartBtn.disabled = false;
+}
+
+function startRematchTimeout() {
+  if (mpRematchTimer) return;
+  mpRematchTimer = setTimeout(() => {
+    clearRematchState();
+    mpDestroy(); state = initState(); gameMode = 'single'; showModeSelect();
+  }, 15000);
+}
+
+function tryMpRematch() {
+  if (!mpIWantRematch || !mpTheyWantRematch) return;
+  clearRematchState();
+  state = initState(); state.phase = 'p1-kick';
+  if (gameMode === 'host') {
+    showGame(); renderPhase();
+  } else {
+    showWait('Penal 1 de 5: esperando que Argentina elija dónde patear…', '');
+  }
+}
+
 function mpError(msg) {
   mpDestroy();
   alert('Error de conexión: ' + msg + '\n\nVolvé al menú e intentá de nuevo.');
   state = initState(); gameMode = 'single'; showModeSelect();
 }
 
-// Messages received from the other device
+// Messages received from the other device — protocolo uno-por-uno
 function onMpMessage(msg) {
   switch (msg.type) {
 
-    case 'p1-done':
-      // Guest receives P1's choices → now guest picks for P2
-      state.p1Kicks  = msg.p1Kicks;
-      state.p1Saves  = msg.p1Saves;
-      state.mode     = msg.sd ? 'sudden-death' : 'normal';
-      state.sdRound  = msg.sdRound || 0;
-      state.phase    = 'p2-kick';
-      state.currentIdx = 0;
+    case 'mp-p1-kicked':
+      // Guest: Argentina ya eligió zona de patada → guest elige dónde atajar
+      state.penIdx  = msg.penIdx;
+      state.mode    = msg.sd ? 'sudden-death' : 'normal';
+      state.sdRound = msg.sdRound || 0;
+      state.phase   = 'p2-save';
       showGame(); renderPhase();
       break;
 
-    case 'p2-done':
-      // Host receives P2's choices → build queue, start animations on both
-      state.p2Kicks = msg.p2Kicks;
-      state.p2Saves = msg.p2Saves;
-      const queue   = buildAnimQueue();
-      const payload = { type:'start-anim', queue, p1Misses:state.p1Misses, p2Misses:state.p2Misses,
-                        goalsP1:state.goalsP1, goalsP2:state.goalsP2, mode:state.mode, sdRound:state.sdRound };
-      mpSend(payload);
-      playAnimQueue(queue, () => state.mode==='normal' ? evaluateNormal() : evaluateSuddenDeath());
+    case 'mp-p2-saved': {
+      // Host: guest eligió atajada → animar penal de Argentina
+      const sd        = state.mode === 'sudden-death';
+      const penLabel  = sd ? `Muerte Súbita R${state.sdRound+1}` : `Penal ${state.penIdx+1} de 5`;
+      const p1Lbl     = teamLabel('argentina', 20);
+      state.p2Saves.push(msg.saveZone);
+      const kickZone  = state.pendingP1Kick;
+      const missType  = getMissType(kickZone, msg.saveZone);
+      state.p1Misses.push(missType);
+      const argGoalNow = !missType && kickZone !== msg.saveZone;
+      if (sd) state.sdArgGoal = argGoalNow;
+      const item = {
+        label: `${penLabel} — ${p1Lbl} patea`,
+        kickZone, saveZone: msg.saveZone,
+        kickerTeam: 'argentina', goalieTeam: 'river', missType
+      };
+      mpSend({ type: 'mp-anim', item });
+      animOnePenalty(item, () => {
+        // Ahora River patea → decirle al guest que elija zona de patada
+        state.p2KickPending = null;
+        mpSend({ type: 'mp-start-p2-kick' });
+        showWait(penLabel + ': esperando que River Plate elija dónde patear…', '');
+      });
+      break;
+    }
+
+    case 'mp-start-p2-kick':
+      // Guest: ahora elige dónde patear
+      state.phase = 'p2-kick';
+      showGame(); renderPhase();
       break;
 
-    case 'start-anim':
-      // Guest receives full animation data
-      state.p1Misses = msg.p1Misses;
-      state.p2Misses = msg.p2Misses;
-      state.goalsP1  = msg.goalsP1  || 0;
-      state.goalsP2  = msg.goalsP2  || 0;
-      state.mode     = msg.mode     || 'normal';
-      state.sdRound  = msg.sdRound  || 0;
-      playAnimQueue(msg.queue, () => {
-        // Guest evaluates to show results (same data → same result)
-        if (state.mode==='normal') evaluateNormal(); else evaluateSuddenDeath();
+    case 'mp-p2-kicked':
+      // Host: guest eligió zona de patada → host elige dónde atajar
+      state.p2KickPending = msg.kickZone;
+      state.phase = 'p1-save';
+      showGame(); renderPhase();
+      break;
+
+    case 'mp-anim':
+      // Guest: recibe datos de animación → anima simultáneamente al host
+      animOnePenalty(msg.item, () => {
+        showWait('Esperando al otro equipo…', '');
       });
       break;
 
-    case 'sd-round':
-      // Guest gets notified of sudden death round
-      state.mode     = 'sudden-death';
-      state.sdRound  = msg.sdRound;
-      state.goalsP1  = msg.goalsP1;
-      state.goalsP2  = msg.goalsP2;
-      state.phase    = 'p2-kick';
-      state.currentIdx = 0;
-      const sdLabel  = state.sdRound === 0 ? '¡Empate! Comienza la Muerte Súbita.' : `Muerte Súbita — Ronda ${state.sdRound+1}`;
-      showWait(sdLabel, 'Esperando que Argentina elija primero...');
-      // guest will receive p1-done when host finishes
+    case 'mp-sd-start':
+      // Guest: comienza muerte súbita o nueva ronda SD
+      state.mode    = 'sudden-death';
+      state.sdRound = msg.sdRound;
+      state.penIdx  = 0;
+      state.goalsP1 = msg.goalsP1;
+      state.goalsP2 = msg.goalsP2;
+      {
+        const sdLabel = msg.sdRound === 0
+          ? '¡Empate! Comienza la Muerte Súbita.'
+          : `Muerte Súbita — Ronda ${msg.sdRound+1}`;
+        showWait(sdLabel, 'Esperando que Argentina elija primero…');
+      }
       break;
 
-    case 'game-over':
-      // Guest receives final results data
+    case 'mp-want-rematch':
+      mpTheyWantRematch = true;
+      if (!mpIWantRematch) {
+        restartBtn.textContent = '¡Rival quiere revancha! — Pulsa para confirmar';
+        startRematchTimeout();
+      }
+      tryMpRematch();
+      break;
+
+    case 'mp-game-over':
+      // Guest: recibe todos los datos finales y muestra resultados
+      state.p1Kicks  = msg.p1Kicks;
+      state.p1Saves  = msg.p1Saves;
+      state.p2Kicks  = msg.p2Kicks;
+      state.p2Saves  = msg.p2Saves;
       state.p1Misses = msg.p1Misses;
       state.p2Misses = msg.p2Misses;
+      state.goalsP1  = msg.goalsP1;
+      state.goalsP2  = msg.goalsP2;
       showFinalResults();
       break;
   }
@@ -2193,7 +2313,7 @@ function initGuest(code) {
     mpConn.on('open', () => {
       statusEl.textContent = '✓ Conectado. Esperando que Argentina elija...';
       state = initState();
-      setTimeout(() => showWait('Esperando que Argentina elija...', 'Cuando terminen te avisamos.'), 800);
+      setTimeout(() => showWait('Penal 1 de 5: esperando que Argentina elija dónde patear…', ''), 800);
     });
     mpConn.on('data',  onMpMessage);
     mpConn.on('close', () => mpError('El rival se desconectó.'));
@@ -2339,14 +2459,13 @@ function initArcade() {
 }
 
 function startArcadeMatch() {
+  clearRematchState();
   state = initState();
   state.phase = 'p1-kick';
   document.getElementById('arcade-banner').style.display = 'block';
   let stageLabel;
   if (arcadeState.stage === 'group') {
     stageLabel = `Grupo A — Fecha ${arcadeState.matchIndex + 1} de 3`;
-  } else if (arcadeState.stage === 'r32') {
-    stageLabel = `Ronda de 32 — Partido ${arcadeState.matchIndex + 1} de 3`;
   } else {
     stageLabel = WC2026_KNOCKOUT[arcadeState.knockoutIndex].label;
   }
@@ -2359,12 +2478,10 @@ function startArcadeMatch() {
 function checkQual(tbl, stageName) {
   const sorted = sortTable(tbl);
   const pos = sorted.findIndex(t => t.isArg);
-  let qualified = pos <= 1;
-  if (!qualified && pos === 2) qualified = Math.random() < 0.78;
+  const qualified = pos <= 1;
   let qualMsg = '';
   if (pos === 0)      qualMsg = `🥇 ¡Argentina terminó 1ª de ${stageName}!`;
   else if (pos === 1) qualMsg = `🥈 Argentina terminó 2ª de ${stageName}.`;
-  else if (qualified) qualMsg = '🏅 Argentina avanza como mejor 3er lugar.';
   return { qualified, qualMsg };
 }
 
@@ -2378,6 +2495,11 @@ function arcadeMatchDone(argWon) {
     const arg = arcadeGroupTable.find(t => t.isArg);
     arg.played++; arg.gf += state.goalsP1; arg.ga += state.goalsP2;
     arg.pts += argWon === true ? 3 : isDraw ? 1 : 0;
+
+    const opp = arcadeGroupTable.find(t => t.name === arcadeOpponent.name);
+    opp.played++; opp.gf += state.goalsP2; opp.ga += state.goalsP1;
+    opp.pts += argWon === false ? 3 : isDraw ? 1 : 0;
+
     arcadeState.matchIndex++;
 
     if (arcadeState.matchIndex < 3) {
@@ -2386,36 +2508,12 @@ function arcadeMatchDone(argWon) {
     } else {
       const { qualified, qualMsg } = checkQual(arcadeGroupTable, 'el grupo');
       if (qualified) {
-        arcadeState.stage = 'r32';
-        arcadeState.matchIndex = 0;
-        const r32s = [...R32_POOL].sort(() => Math.random() - 0.5);
-        arcadeR32Opps  = r32s.slice(0, 3);
-        arcadeOpponent = arcadeR32Opps[0];
-        arcadeR32Table = makeTable(arcadeR32Opps);
-        showArcadeBetween({ prevOpponent, won: argWon, isDraw, scoreStr, type: 'group-done', qualMsg });
-      } else {
-        showArcadeEliminated(prevOpponent, scoreStr, 'Fase de Grupos');
-      }
-    }
-
-  } else if (arcadeState.stage === 'r32') {
-    const arg = arcadeR32Table.find(t => t.isArg);
-    arg.played++; arg.gf += state.goalsP1; arg.ga += state.goalsP2;
-    arg.pts += argWon === true ? 3 : isDraw ? 1 : 0;
-    arcadeState.matchIndex++;
-
-    if (arcadeState.matchIndex < 3) {
-      arcadeOpponent = arcadeR32Opps[arcadeState.matchIndex];
-      showArcadeBetween({ prevOpponent, won: argWon, isDraw, scoreStr, type: 'r32-mid' });
-    } else {
-      const { qualified, qualMsg } = checkQual(arcadeR32Table, 'la Ronda de 32');
-      if (qualified) {
         arcadeState.stage = 'knockout';
         arcadeState.knockoutIndex = 0;
         arcadeOpponent = WC2026_KNOCKOUT[0].opponent;
-        showArcadeBetween({ prevOpponent, won: argWon, isDraw, scoreStr, type: 'r32-done', qualMsg });
+        showArcadeBetween({ prevOpponent, won: argWon, isDraw, scoreStr, type: 'group-done', qualMsg });
       } else {
-        showArcadeEliminated(prevOpponent, scoreStr, 'Ronda de 32');
+        showArcadeEliminated(prevOpponent, scoreStr, 'Fase de Grupos');
       }
     }
 
@@ -2457,13 +2555,12 @@ function showArcadeBetween({ prevOpponent, won, isDraw, scoreStr, type, qualMsg 
   if (qualMsg) { advEl.textContent = qualMsg; advEl.style.display = 'block'; }
   else         { advEl.style.display = 'none'; }
 
-  const tblWrap = document.getElementById('arcade-between-table');
-  const tblCont = document.getElementById('arcade-table-content');
+  const tblWrap  = document.getElementById('arcade-between-table');
+  const tblCont  = document.getElementById('arcade-table-content');
+  const tblTitle = document.getElementById('arcade-table-title');
   if (type === 'group-mid' || type === 'group-done') {
+    tblTitle.textContent = '📊 Tabla — Grupo A';
     tblCont.innerHTML = tableHTML(arcadeGroupTable);
-    tblWrap.style.display = 'block';
-  } else if (type === 'r32-mid' || type === 'r32-done') {
-    tblCont.innerHTML = tableHTML(arcadeR32Table);
     tblWrap.style.display = 'block';
   } else {
     tblWrap.style.display = 'none';
@@ -2475,15 +2572,7 @@ function showArcadeBetween({ prevOpponent, won, isDraw, scoreStr, type, qualMsg 
     const next = arcadeGroupOpps[arcadeState.matchIndex];
     nextEl.innerHTML = `<strong>Grupo A — Fecha ${arcadeState.matchIndex + 1} de 3</strong><br>🇦🇷 Argentina vs ${next.flag} ${next.name}`;
     nextEl.style.display = 'block'; btnEl.style.display = 'block';
-  } else if (type === 'group-done') {
-    const next = arcadeR32Opps[0];
-    nextEl.innerHTML = `<strong>Ronda de 32 — Partido 1 de 3</strong><br>🇦🇷 Argentina vs ${next.flag} ${next.name}`;
-    nextEl.style.display = 'block'; btnEl.style.display = 'block';
-  } else if (type === 'r32-mid') {
-    const next = arcadeR32Opps[arcadeState.matchIndex];
-    nextEl.innerHTML = `<strong>Ronda de 32 — Partido ${arcadeState.matchIndex + 1} de 3</strong><br>🇦🇷 Argentina vs ${next.flag} ${next.name}`;
-    nextEl.style.display = 'block'; btnEl.style.display = 'block';
-  } else if (type === 'r32-done' || type === 'knockout') {
+  } else if (type === 'group-done' || type === 'knockout') {
     const ko = WC2026_KNOCKOUT[arcadeState.knockoutIndex];
     nextEl.innerHTML = `<strong>${ko.label}</strong><br>🇦🇷 Argentina vs ${arcadeOpponent.flag} ${arcadeOpponent.name}`;
     nextEl.style.display = 'block'; btnEl.style.display = 'block';
@@ -2513,31 +2602,43 @@ function showArcadeChampion() {
 }
 
 // ══════════════════════════════════════════════
-// HALL OF FAME
+// HALL OF FAME — Firebase Realtime Database
+// Para configurar: reemplazá HOF_DB con la URL
+// de tu proyecto Firebase (ver instrucciones).
 // ══════════════════════════════════════════════
-function getHOF() {
-  try { return JSON.parse(localStorage.getItem('penales_hof') || '[]'); }
-  catch(e) { return []; }
+const HOF_DB = 'https://penales-hof-default-rtdb.firebaseio.com';
+
+async function getHOF() {
+  try {
+    const resp = await fetch(`${HOF_DB}/hof.json`);
+    if (!resp.ok) return [];
+    const data = await resp.json();
+    if (!data) return [];
+    return Object.values(data).sort((a, b) => b.ts - a.ts);
+  } catch(e) { return []; }
 }
 
-function addToHOF(name) {
-  const hof = getHOF();
+async function addToHOF(name) {
   const now  = new Date();
   const date = now.toLocaleDateString('es-AR', { day:'2-digit', month:'2-digit', year:'numeric' });
-  hof.push({ name: name.trim(), date });
-  localStorage.setItem('penales_hof', JSON.stringify(hof));
+  const resp = await fetch(`${HOF_DB}/hof.json`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name.trim(), date, ts: Date.now() })
+  });
+  if (!resp.ok) throw new Error('Error al guardar');
 }
 
-function renderHOF() {
-  const hof = getHOF();
+async function renderHOF() {
   const listEl = document.getElementById('hof-list');
+  listEl.innerHTML = '<div class="hof-empty">Cargando…</div>';
+  const hof = await getHOF();
   if (hof.length === 0) {
     listEl.innerHTML = '<div class="hof-empty">Nadie ha ganado todavía.<br>¿Serás el primero?</div>';
     return;
   }
   const medals = ['🥇','🥈','🥉'];
-  // Show newest first
-  listEl.innerHTML = [...hof].reverse().map((e, i) => {
+  listEl.innerHTML = hof.map((e, i) => {
     const medal = i < 3 ? medals[i] : `${i+1}.`;
     return `<div class="hof-entry">
       <span class="hof-medal">${medal}</span>
@@ -2547,10 +2648,10 @@ function renderHOF() {
   }).join('');
 }
 
-function showHOF() {
+async function showHOF() {
   hideAll();
-  renderHOF();
   hofScreen.style.display = 'flex';
+  await renderHOF();
 }
 
 // ── Arcade button listeners ──
@@ -2565,12 +2666,19 @@ document.getElementById('arcade-champ-again-btn').addEventListener('click', init
 document.getElementById('arcade-champ-hof-btn').addEventListener('click', showHOF);
 document.getElementById('arcade-champ-menu-btn').addEventListener('click', () => { gameMode='single'; showModeSelect(); });
 
-document.getElementById('champ-register-btn').addEventListener('click', () => {
+document.getElementById('champ-register-btn').addEventListener('click', async () => {
   const name = document.getElementById('champ-name-input').value.trim();
   if (!name) { document.getElementById('champ-name-input').focus(); return; }
-  addToHOF(name);
-  document.getElementById('champ-register-wrap').style.display = 'none';
-  document.getElementById('champ-registered-msg').style.display = 'block';
+  const btn = document.getElementById('champ-register-btn');
+  btn.disabled = true; btn.textContent = 'Guardando…';
+  try {
+    await addToHOF(name);
+    document.getElementById('champ-register-wrap').style.display = 'none';
+    document.getElementById('champ-registered-msg').style.display = 'block';
+  } catch(e) {
+    btn.disabled = false; btn.textContent = 'Registrar';
+    alert('No se pudo guardar. Verificá tu conexión a internet.');
+  }
 });
 
 document.getElementById('champ-name-input').addEventListener('keydown', e => {
